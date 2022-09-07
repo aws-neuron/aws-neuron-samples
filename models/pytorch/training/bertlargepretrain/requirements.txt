@@ -1,7 +1,7 @@
 graphviz
 tensorboard==2.6
 torchvision==0.12.0
-transformers==4.12.0
+transformers==4.15.0
 pillow
 pytest
 accelerate
