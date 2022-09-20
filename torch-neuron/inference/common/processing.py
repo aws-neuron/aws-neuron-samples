@@ -122,8 +122,17 @@ def load_sample_imgB():
 def load_sample_imgC():
     if not os.path.exists("man_walking.jpg"):
         urllib.request.urlretrieve("https://images.unsplash.com/photo-1611324204543-ecc01e953173", "man_walking.jpg")
-        #urllib.request.urlretrieve("https://raw.githubusercontent.com/samir-souza/laboratory/master/06_PoseEstimation/man_walking.jpg", "man_walking.jpg")
     return cv2.imread("man_walking.jpg")
+
+def load_sample_imgD():
+    if not os.path.exists("signs.jpg"):
+        urllib.request.urlretrieve("https://cdn-01.media-brady.com/store/stca/media/catalog/product/r/e/reflective-warning-signs-deer-crossing-ac0568-lg.jpg", "signs.jpg")
+    return cv2.imread("signs.jpg")
+
+def load_sample_imgE():
+    if not os.path.exists("text.jpg"):
+        urllib.request.urlretrieve("https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg", "text.jpg")
+    return cv2.imread("text.jpg")
 
 def load_imagenet1k_labels():
     # Download the labels for Imagenet 1k
