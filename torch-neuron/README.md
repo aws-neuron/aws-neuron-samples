@@ -11,7 +11,7 @@ The following samples are available:
 |[BERT-base](inference/bertbasecased)	|NLP	|max_length=128	|1.10.1.2.2.0.0	|Pytorch 1.10.2	|[link](https://huggingface.co/bert-base-cased)|
 |[BERT-large](inference/bertlargeuncased)	|NLP	|max_length=128	|1.10.1.2.2.0.0	|Pytorch 1.10.2	|[link](https://huggingface.co/bert-large-uncased)|
 |[CRAFT](inference/craft)		|CV - Text Detection	|1,3,800,800 - max_length=32|1.10.2.2.3.0.0 |Pytorch 1.10.2 |[link](https://github.com/clovaai/CRAFT-pytorch)|
-|[EfficientNet](inference/efficentnet)	|CV - Image Classification	|1,3,224,224	|1.10.1.2.2.0.0	|Pytorch 1.10.1	|[link](https://pytorch.org/vision/stable/models/efficientnet.html)|
+|[EfficientNet](inference/efficientnet)	|CV - Image Classification	|1,3,224,224	|1.10.1.2.2.0.0	|Pytorch 1.10.1	|[link](https://pytorch.org/vision/stable/models/efficientnet.html)|
 |[GFL](inference/gfl_mmdet)		|CV - Object Detection	|1,3,800,1216	|1.10.2.2.3.0.0 |Pytorch 1.10.2 |[link](https://github.com/open-mmlab/mmdetection/blob/master/configs/gfl/README.md)|
 |[HRNet](inference/hrnet)	|CV - Pose Estimation	|1,3,384,288	|1.10.2.2.3.0.0	|Pytorch 1.10.2	|[link](https://github.com/leoxiaobin/deep-high-resolution-net.pytorch.git)|
 |[MarianNMT](inference/marianmt)	|NLP	|max_length=32 |1.7.\*|Pytorch 1.7|[link](https://huggingface.co/Helsinki-NLP/opus-mt-en-de)|
