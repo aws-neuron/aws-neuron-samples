@@ -1,6 +1,6 @@
 # PyTorch Neuron Samples for AWS Inferentia
 
-This directory contains samples that demonstrate model compilation and inference using PyTorch Neuron for a variety of popular deep learning models. These samples can be run on [AWS Inferentia](https://aws.amazon.com/machine-learning/inferentia/) (inf1 instances) using [Amazon SageMaker](https://aws.amazon.com/sagemaker) or [Amazon EC2](https://aws.amazon.com/ec2/).
+This directory contains Jupyter notebooks that demonstrate model compilation and inference using PyTorch Neuron for a variety of popular deep learning models. These samples can be run on [AWS Inferentia](https://aws.amazon.com/machine-learning/inferentia/) (inf1 instances) using [Amazon SageMaker](https://aws.amazon.com/sagemaker) or [Amazon EC2](https://aws.amazon.com/ec2/).
 
 For each sample you will also find additional information such as the model type, configuration used to compile the model, framework version, and a link to the original model implementation.
 
