@@ -8,22 +8,22 @@ The following samples are available:
 
 |Model Name	|Model Type	|Input Shape	|NeuronSDK Version	|Framework / Version	|Original Implementation	|
 |---	|---	|---	|---	|---	|---	|
-|[BERT-Base](torch-neuron/inference/bertbasecased)	|NLP	|max_length=128	|1.10.1.2.2.0.0	|Pytorch 1.10.2	|[link](https://huggingface.co/bert-base-cased)|
-|[BERT-Large](torch-neuron/inference/bertlargeuncased)	|NLP	|max_length=128	|1.10.1.2.2.0.0	|Pytorch 1.10.2	|[link](https://huggingface.co/bert-large-uncased)|
-|[CRAFT](torch-neuron/inference/craft)		|CV - Text Detection	|1,3,800,800 - max_length=32|1.10.2.2.3.0.0 |Pytorch 1.10.2 |[link](https://github.com/clovaai/CRAFT-pytorch)|
-|[EfficientNet](torch-neuron/inference/efficentnet)	|CV - Image Classification	|1,3,224,224	|1.10.1.2.2.0.0	|Pytorch 1.10.1	|[link](https://pytorch.org/vision/stable/models/efficientnet.html)|
-|[GFL](torch-neuron/inference/gfl_mmdet)		|CV - Object Detection	|1,3,800,1216	|1.10.2.2.3.0.0 |Pytorch 1.10.2 |[link](https://github.com/open-mmlab/mmdetection/blob/master/configs/gfl/README.md)|
-|[HRNet](torch-neuron/inference/hrnet)	|CV - Pose Estimation	|1,3,384,288	|1.10.2.2.3.0.0	|Pytorch 1.10.2	|[link](https://github.com/leoxiaobin/deep-high-resolution-net.pytorch.git)|
-|[MarianNMT](torch-neuron/inference/marianmt)	|NLP	|max_length=32 |1.7.\*|Pytorch 1.7|[link](https://huggingface.co/Helsinki-NLP/opus-mt-en-de)|
-|[ResNet (18,34,50,101,152)](torch-neuron/inference/resnet)|CV - Image Classification	|1,3,224,224	|1.10.1.2.2.0.0	|Pytorch 1.10.1	|[link](https://pytorch.org/vision/stable/models/resnet.html)|
-|[ResNetX](torch-neuron/inference/resnext)	|CV - Image Classification	|1,3,224,224	|1.10.1.2.2.0.0	|Pytorch 1.10.1	|[link](https://pytorch.org/vision/stable/models/resnext.html)|
-|[Roberta-Base](torch-neuron/inference/robertabse)	|NLP	|max_length=128|1.10.1.2.2.0.0	|Pytorch 1.10.2|[link](https://huggingface.co/roberta-base)|
-|[SSD (SSD300-VGG16)](torch-neuron/inference/ssd)	|CV - Object detection	|1,3,300,300	|1.10.2.2.3.0.0	|Pytorch 1.10.2	|[link](https://pytorch.org/vision/stable/models/ssd.html)|
-|[TrOCR](torch-neuron/inference/trocr)		|CV - OCR	|1,3,384,384	|1.10.2.2.3.0.0 |Pytorch 1.10.2 |[link](https://huggingface.co/docs/transformers/en/model_doc/trocr)|
-|[VGG16](torch-neuron/inference/vgg)	|CV - Image Classification	|1,3,224,224	|1.10.1.2.2.0.0	|Pytorch 1.10.1	|[link](https://pytorch.org/vision/stable/models/vgg.html)|
-|[ViT](torch-neuron/inference/vit)		|CV - Image Classification	|1,3,224,224	|1.10.2.2.3.0.0 |Pytorch 1.10.2 |[link](https://huggingface.co/docs/transformers/model_doc/vit)|
-|[Yolo-v5](torch-neuron/inference/vgg)	|CV - Object Detection	|1,3,640,640	|1.10.1.2.2.0.0	|Pytorch 1.10.1	|[link](https://github.com/ultralytics/yolov5/releases/tag/v5.0)|
-|[Yolov-v6](torch-neuron/inference/yolov6)	|CV - Object Detection	|1,3,640,640	|1.11.0.2.3.0.0 |Pytorch 1.11.0 |[link](https://github.com/meituan/YOLOv6.git)|
+|[BERT-Base](inference/bertbasecased)	|NLP	|max_length=128	|1.10.1.2.2.0.0	|Pytorch 1.10.2	|[link](https://huggingface.co/bert-base-cased)|
+|[BERT-Large](inference/bertlargeuncased)	|NLP	|max_length=128	|1.10.1.2.2.0.0	|Pytorch 1.10.2	|[link](https://huggingface.co/bert-large-uncased)|
+|[CRAFT](inference/craft)		|CV - Text Detection	|1,3,800,800 - max_length=32|1.10.2.2.3.0.0 |Pytorch 1.10.2 |[link](https://github.com/clovaai/CRAFT-pytorch)|
+|[EfficientNet](inference/efficentnet)	|CV - Image Classification	|1,3,224,224	|1.10.1.2.2.0.0	|Pytorch 1.10.1	|[link](https://pytorch.org/vision/stable/models/efficientnet.html)|
+|[GFL](inference/gfl_mmdet)		|CV - Object Detection	|1,3,800,1216	|1.10.2.2.3.0.0 |Pytorch 1.10.2 |[link](https://github.com/open-mmlab/mmdetection/blob/master/configs/gfl/README.md)|
+|[HRNet](inference/hrnet)	|CV - Pose Estimation	|1,3,384,288	|1.10.2.2.3.0.0	|Pytorch 1.10.2	|[link](https://github.com/leoxiaobin/deep-high-resolution-net.pytorch.git)|
+|[MarianNMT](inference/marianmt)	|NLP	|max_length=32 |1.7.\*|Pytorch 1.7|[link](https://huggingface.co/Helsinki-NLP/opus-mt-en-de)|
+|[ResNet (18,34,50,101,152)](inference/resnet)|CV - Image Classification	|1,3,224,224	|1.10.1.2.2.0.0	|Pytorch 1.10.1	|[link](https://pytorch.org/vision/stable/models/resnet.html)|
+|[ResNetX](inference/resnext)	|CV - Image Classification	|1,3,224,224	|1.10.1.2.2.0.0	|Pytorch 1.10.1	|[link](https://pytorch.org/vision/stable/models/resnext.html)|
+|[Roberta-Base](inference/robertabse)	|NLP	|max_length=128|1.10.1.2.2.0.0	|Pytorch 1.10.2|[link](https://huggingface.co/roberta-base)|
+|[SSD (SSD300-VGG16)](inference/ssd)	|CV - Object detection	|1,3,300,300	|1.10.2.2.3.0.0	|Pytorch 1.10.2	|[link](https://pytorch.org/vision/stable/models/ssd.html)|
+|[TrOCR](inference/trocr)		|CV - OCR	|1,3,384,384	|1.10.2.2.3.0.0 |Pytorch 1.10.2 |[link](https://huggingface.co/docs/transformers/en/model_doc/trocr)|
+|[VGG16](inference/vgg)	|CV - Image Classification	|1,3,224,224	|1.10.1.2.2.0.0	|Pytorch 1.10.1	|[link](https://pytorch.org/vision/stable/models/vgg.html)|
+|[ViT](inference/vit)		|CV - Image Classification	|1,3,224,224	|1.10.2.2.3.0.0 |Pytorch 1.10.2 |[link](https://huggingface.co/docs/transformers/model_doc/vit)|
+|[Yolo-v5](inference/vgg)	|CV - Object Detection	|1,3,640,640	|1.10.1.2.2.0.0	|Pytorch 1.10.1	|[link](https://github.com/ultralytics/yolov5/releases/tag/v5.0)|
+|[Yolov-v6](inference/yolov6)	|CV - Object Detection	|1,3,640,640	|1.11.0.2.3.0.0 |Pytorch 1.11.0 |[link](https://github.com/meituan/YOLOv6.git)|
 
 ### Configuring the environment
 

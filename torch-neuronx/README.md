@@ -1,6 +1,6 @@
 # PyTorch Neuron Samples for AWS Trainium
 
-This directory contains sample PyTorch Neuron training scripts that can be run on AWS Trainium (trn1 instances).
+This directory contains sample PyTorch Neuron training scripts that can be run on [AWS Trainium](https://aws.amazon.com/machine-learning/trainium/) (trn1 instances).
 
 The following samples are available:
 
