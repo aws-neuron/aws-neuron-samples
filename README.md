@@ -14,7 +14,7 @@ Samples are organized by use case (training, inference) and deep learning framew
 
 ## Inference
 
-| Framework | Description | Supported EC2 Instance Type |
+| Framework | Description | Supported&nbsp;EC2 Instance&nbsp;Type |
 | --- | --- | --- |
 | [PyTorch Neuron](torch-neuron) | Sample Jupyter notebooks demonstrating model compilation and inference for various PyTorch models on AWS Inferentia | inf1 |
 | [TensorFlow Neuron](tensorflow-neuron) | Sample Jupyter notebooks demonstrating model compilation and inference for various TensorFlow models on AWS Inferentia | inf1 |
