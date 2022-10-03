@@ -1,4 +1,4 @@
-# TensorFlow Neuron Samples for AWS Inferentia
+# TensorFlow Neuron (tensorflow-neuron) Samples for AWS Inf1
 
 This directory contains Jupyter notebooks that demonstrate model compilation and inference using TensorFlow Neuron for a variety of popular deep learning models. These samples can be run on [AWS Inferentia](https://aws.amazon.com/machine-learning/inferentia/) (inf1 instances) using [Amazon SageMaker](https://aws.amazon.com/sagemaker) or [Amazon EC2](https://aws.amazon.com/ec2/).
 
