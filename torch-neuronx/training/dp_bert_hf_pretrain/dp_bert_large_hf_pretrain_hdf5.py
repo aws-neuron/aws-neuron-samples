@@ -170,6 +170,7 @@ class Logger():
             step_0start = step - 1
             if step_0start < len(self.golden_steploss) and step_0start >= 0:
                 np.testing.assert_allclose(step_loss, self.golden_steploss[step_0start], rtol=2.3e-1)
+            assert (not np.isnan(step_loss)), "Encountered NaN in loss!"
 
 #Workaround because python functions are not picklable
 class WorkerInitObj(object):
@@ -303,8 +304,12 @@ def train_bert_hdf5(flags, **kwags):
                 xm.mark_step()
                 running_loss_cpu = running_loss.detach().cpu().item()
                 running_loss.zero_()
+
+                # all-reduce and then clip. Order matters.
+                xm.reduce_gradients(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)  # Gradient clipping is not in AdamW anymore
-                xm.optimizer_step(optimizer)
+
+                optimizer.step()
                 optimizer.zero_grad()
                 scheduler.step()
                 global_step += 1
