@@ -10,14 +10,14 @@ Samples are organized by use case (training, inference) and deep learning framew
 
 | Framework | Description | Instance Type |
 | --- | --- | --- |
-| [PyTorch Neuron](torch-neuronx) | Sample training scripts for training various PyTorch models on AWS Trainium | Trn1 |
+| [PyTorch Neuron (torch-neuronx)](torch-neuronx) | Sample training scripts for training various PyTorch models on AWS Trainium | Trn1 |
 
 ## Inference
 
 | Framework | Description | Instance Type |
 | --- | --- | --- |
-| [PyTorch Neuron](torch-neuron) | Sample Jupyter notebooks demonstrating model compilation and inference for various PyTorch models on AWS Inferentia | inf1 |
-| [TensorFlow Neuron](tensorflow-neuron) | Sample Jupyter notebooks demonstrating model compilation and inference for various TensorFlow models on AWS Inferentia | Inf1 |
+| [PyTorch Neuron (torch-neuron)](torch-neuron) | Sample Jupyter notebooks demonstrating model compilation and inference for various PyTorch models on AWS Inferentia | inf1 |
+| [TensorFlow Neuron (tensorflow-neuronx)](tensorflow-neuron) | Sample Jupyter notebooks demonstrating model compilation and inference for various TensorFlow models on AWS Inferentia | Inf1 |
 
 ## Getting Help
 
