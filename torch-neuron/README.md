@@ -24,6 +24,8 @@ The following samples are available:
 |[ViT](inference/vit)		|CV - Image Classification	|1,3,224,224	|1.10.2.2.3.0.0 |Pytorch 1.10.2 |[link](https://huggingface.co/docs/transformers/model_doc/vit)|
 |[YOLOv5](inference/yolov5)	|CV - Object Detection	|1,3,640,640	|1.10.1.2.2.0.0	|Pytorch 1.10.1	|[link](https://github.com/ultralytics/yolov5/releases/tag/v5.0)|
 |[YOLOv6](inference/yolov6)	|CV - Object Detection	|1,3,640,640	|1.11.0.2.3.0.0 |Pytorch 1.11.0 |[link](https://github.com/meituan/YOLOv6.git)|
+|[YOLOF](inference/yolof_detectron2)	|CV - Object Detection	|1,3,300,300	|1.10.1.2.2.0.0	|Pytorch 1.10.1	|[link](https://github.com/chensnathan/YOLOF)|
+|[Fairseq](inference/fairseq)	|NLP|max_length=32|1.10.1.*|Pytorch 1.10.1	|[link](https://github.com/facebookresearch/fairseq)|
 
 ### Configuring the environment
 
