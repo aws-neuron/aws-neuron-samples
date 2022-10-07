@@ -36,7 +36,9 @@ import argparse
 import random
 import json
 import queue
-from collections import deque
+from typing import Any, Dict, List
+from datetime import datetime
+from collections import deque, namedtuple
 import torch_xla
 import torch.nn as nn
 import torch_xla.core.xla_model as xm
@@ -71,38 +73,71 @@ os.environ["NEURON_CC_FLAGS"] = "--model-type=transformer"
 # For PT autocast.
 torch.cuda.is_bf16_supported = lambda: True
 
+Metric = namedtuple("Metric", ["name", "value", "units", "additional_data"])
+
 
 class TrainingMetrics:
     def __init__(self,json_file):
         self.json_file = json_file
 
-    def read_modify_write_file(self, data):
+    def read_modify_write_file(self, data, key: str = "metrics") -> None:
         """
-        data (dict): Data to update in the file.
+        data (dict of training parameters or list of metrics): Data to update in the file.
+        key (str): the dictionary key under which data is to be recorded
         """
         result_dict = {}
-        print(f"Updating train metrics in provide {self.json_file} file")
+        print(f"Writing data to the provided results file: {self.json_file}")
         if os.path.exists(self.json_file):
             with open(self.json_file) as json_file:
-                result_dict = json.loads(json_file.read()) or {}
-                print(f"Current data: {result_dict}")
+                result_dict = json.loads(json_file.read()) or result_dict
+        print(f"Updating with {key} data: {data}")
         if result_dict:
             try:
                 # handle internal named entity if present
-                result_dict[next(iter(result_dict))].update(data)
+                results = result_dict[next(iter(result_dict))]
             except Exception:
-                result_dict = data
+                results = result_dict
+            current = results.get(key)
+            if not current:
+                results[key] = data
+            else:
+                if isinstance(current, list):
+                    current.extend(data)
+                elif isinstance(current, dict):
+                    current.update(data)
         else:
-            result_dict = data
-        print(f"Updating with data: {data}")
+            result_dict[key] = data
         with open(self.json_file, 'w') as json_file:
             json.dump(result_dict, json_file)
 
-    def update(self, **kwargs):
+    def store_metrics(self, metrics: List[Metric]) -> None:
         """
-        Write the Metrics to output file.
+        Writes collected metrics to the file.
+
         """
-        self.read_modify_write_file(kwargs)
+        data = [
+            {
+                "MetricName": metric.name,
+                "MeasuredValue": metric.value,
+                "Units": metric.units,
+                "Timestamp": datetime.now().isoformat(),
+                "AdditionalData": metric.additional_data,
+            } for metric in metrics
+        ]
+        self.update(data=data, key="metrics")
+
+    def store_parameters(self, parameters: Dict[str, Any]) -> None:
+        """
+        Writes specified model and configuration parameters to the file.
+
+        """
+        self.update(data=parameters, key="parameters")
+
+    def update(self, **kwargs: Any) -> None:
+        """
+        Write specified data to the output file.
+        """
+        self.read_modify_write_file(**kwargs)
 
 
 class Throughput:
@@ -125,12 +160,14 @@ class Throughput:
         throughput = window_size * self.seqs_per_iteration / self.window_time
         return throughput
 
-class Logger():
-    def __init__(self, args, world_size):
+class Logger:
+    def __init__(self, args, world_size, model_dtype):
         xla = 'torch_xla' in sys.modules
-        self.throughput_peak = 0.0
+        self.throughputs = []
+        dtype_short = model_dtype.replace("torch.", "")
         self.tb = SummaryWriter(os.path.join(args.output_dir,
                                              f"neuron_tblogs_{time.strftime('%m%d%y_%H%M')}"
+                                             f"_{dtype_short}"
                                              f"_w{world_size}"
                                              f"_lr{args.lr}"
                                              f"_bs{args.batch_size}"
@@ -157,20 +194,22 @@ class Logger():
         except:
             return os.environ.get("HOSTNAME", "unknown")
 
-    def log(self, epoch, step, step_loss, learning_rate, throughput):
+    def log(self, epoch, step, step_loss, learning_rate, throughput, grad_norm=None):
         time_now = time.asctime()
-        print(f'LOG {time_now} - ({epoch}, {step}) step_loss : {step_loss:.4f}  learning_rate : {learning_rate:.2e}  throughput : {throughput:.2f}',
-              flush=True)
+        grad_norm_msg = f'grad-norm : {grad_norm}' if grad_norm else ''
+        print(f'LOG {time_now} - ({epoch}, {step}) step_loss : {step_loss:.4f} '
+              f'learning_rate : {learning_rate:.2e} throughput : {throughput:.2f} '
+              f'{grad_norm_msg}', flush=True)
         self.tb.add_scalar('step loss', step_loss, step)
         self.tb.add_scalar('learning rate', learning_rate, step)
         self.tb.add_scalar('throughput', throughput, step)
-        if throughput > self.throughput_peak:
-            self.throughput_peak = throughput
+        if grad_norm:
+            self.tb.add_scalar('grad-norm', grad_norm, step)
+        self.throughputs.append(throughput)
         if not os.environ.get("NEURON_EXTRACT_GRAPHS_ONLY", None):
             step_0start = step - 1
             if step_0start < len(self.golden_steploss) and step_0start >= 0:
                 np.testing.assert_allclose(step_loss, self.golden_steploss[step_0start], rtol=2.3e-1)
-            assert (not np.isnan(step_loss)), "Encountered NaN in loss!"
 
 #Workaround because python functions are not picklable
 class WorkerInitObj(object):
@@ -224,6 +263,14 @@ class pretraining_dataset(Dataset):
         return [input_ids, segment_ids, input_mask,
                 masked_lm_labels, next_sentence_labels]
 
+    @property
+    def sequence_length(self) -> int:
+        """
+        Returns the sequence length derived from the specified pre-tokenized dataset.
+
+        """
+        return len(self.inputs[0][0])
+
 
 def get_model(flags):
     base_model = BertForPreTraining.from_pretrained('bert-large-uncased')
@@ -249,10 +296,25 @@ def fix_ckpt_params(state_dict):
         state_dict[new_k] = state_dict[k]
         del state_dict[k]
 
-def train_bert_hdf5(flags, **kwags):
+def get_dtype(model) -> str:
+    """
+    Reference: https://pytorch.org/xla/release/1.12/index.html#xla-tensors-and-bfloat16
+
+    """
+    if "XLA_USE_BF16" in os.environ:
+        return "torch.bfloat16"
+    if "XLA_DOWNCAST_BF16" in os.environ:
+        if "torch.float" in str(model.dtype):
+            return "torch.bfloat16"
+        if "torch.double" in str(model.dtype):
+            return "torch.float32"
+    return str(model.dtype)
+
+def train_bert_hdf5(flags):
     rank = xm.get_ordinal()
     world_size = xm.xrt_world_size()
-    is_root = xm.is_master_ordinal()
+    is_root = xm.is_master_ordinal(local=False)
+    extract_graphs_only = os.environ.get("NEURON_EXTRACT_GRAPHS_ONLY", None)
     set_seed(flags.seed)
     worker_init = WorkerInitObj(flags.seed)
     device = xm.xla_device()
@@ -263,6 +325,7 @@ def train_bert_hdf5(flags, **kwags):
     # https://github.com/huggingface/transformers/blob/v4.12.0/src/transformers/models/bert/modeling_bert.py#L669
     model.cls.predictions.decoder.bias = model.cls.predictions.bias
     model.train()
+    model_dtype = get_dtype(model)
     running_loss = torch.zeros(1).to(device)
 
     param_optimizer = list(model.named_parameters())
@@ -270,19 +333,42 @@ def train_bert_hdf5(flags, **kwags):
 
     optimizer_grouped_parameters = [
         {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}]
+        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+    ]
 
     optimizer = AdamW(optimizer_grouped_parameters, flags.lr)
     optimizer.zero_grad()
 
     if is_root:
-        logger = Logger(flags, world_size)
+        if not os.path.exists(flags.output_dir):
+            os.makedirs(flags.output_dir, exist_ok=True)
+        if not extract_graphs_only:
+            logger = Logger(flags, world_size, model_dtype)
+        metric_writer = TrainingMetrics(flags.metrics_file)
         throughput = Throughput(flags.batch_size, xm.xrt_world_size(), flags.grad_accum_usteps)
         print('--------TRAINING CONFIG----------')
         print(flags)
         print('--------MODEL CONFIG----------')
         print(model.config)
         print('---------------------------------')
+        metric_writer.store_parameters(
+            {
+                "Model": model.name_or_path,
+                "Model configuration": str(model.config),
+                "World size": world_size,
+                "Data parallel degree": world_size,
+                "Batch size": flags.batch_size,
+                "Total steps": flags.steps_this_run,
+                "Seed": flags.seed,
+                "Optimizer": str(optimizer),
+                "Data type": model_dtype,
+                "Gradient accumulation microsteps": flags.grad_accum_usteps,
+                "Warmup steps": flags.warmup_steps,
+                "Shards per checkpoint": flags.shards_per_ckpt,
+                "Dataset": os.path.basename(os.path.normpath(flags.data_dir)),
+                "Environment variables": {variable: value for variable, value in os.environ.items() if variable.startswith("NEURON") or variable.startswith("XLA")}
+            }
+        )
 
     def train_loop_fn(model, optimizer, train_loader, epoch, global_step, training_ustep, running_loss):
         max_grad_norm = 1.0
@@ -304,18 +390,31 @@ def train_bert_hdf5(flags, **kwags):
                 xm.mark_step()
                 running_loss_cpu = running_loss.detach().cpu().item()
                 running_loss.zero_()
-
                 # all-reduce and then clip. Order matters.
                 xm.reduce_gradients(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)  # Gradient clipping is not in AdamW anymore
-
                 optimizer.step()
+
+                if flags.print_grad_norm and is_root:
+                    with torch.no_grad():
+                        total_norm = 0.0
+                        for p in model.parameters():
+                            param_norm_sq = torch.square(p.grad).sum()
+                            total_norm += param_norm_sq
+                        total_norm = torch.sqrt(total_norm)
+
                 optimizer.zero_grad()
                 scheduler.step()
                 global_step += 1
-                if is_root:
+
+                if is_root and not extract_graphs_only:
+                    total_norm_cpu = None
+                    if flags.print_grad_norm:
+                        xm.mark_step()
+                        total_norm_cpu = total_norm.detach().cpu().item()
                     #NOTE: The running_loss is the loss of the global_step
-                    logger.log(epoch, global_step, running_loss_cpu, optimizer.param_groups[0]['lr'], throughput.get_throughput())
+                    logger.log(epoch, global_step, running_loss_cpu, optimizer.param_groups[0]['lr'], 
+                               throughput.get_throughput(), total_norm_cpu)
                 if global_step >= flags.steps_this_run:
                     #NOTE: Prevent runtime "Call to recv failed : Broken pipe" issue
                     xm.mark_step()
@@ -325,13 +424,20 @@ def train_bert_hdf5(flags, **kwags):
 
     scheduler_state_dict = None
     if flags.resume_ckpt:
-        if flags.resume_step == -1 or flags.phase2:
-            model_names = [f for f in os.listdir(flags.output_dir) if f.endswith(".pt")]
-            assert len(model_names) > 0, "Make sure there are ckpt_*.pt files in {}".format(flags.output_dir)
-            global_step = max([int(x.split('.pt')[0].split('_')[1].strip()) for x in model_names])
+        if flags.resume_ckpt_path:
+            ckpt_path = flags.resume_ckpt_path
+            global_step = int(ckpt_path.split('.pt')[0].split('_')[1].strip())
         else:
-            global_step = flags.resume_step
-        ckpt_path = os.path.join(flags.output_dir, "ckpt_{}.pt".format(global_step))
+            if flags.resume_step == -1 or flags.phase2:
+                assert (os.path.exists(flags.output_dir) and os.path.isdir(flags.output_dir)), \
+                    "Resuming from last checkpoint in {}, but it doesn't exist or is not a dir. ".format(flags.output_dir) \
+                    + "You can also specify path to checkpoint using resume_ckpt_path option."
+                model_names = [f for f in os.listdir(flags.output_dir) if f.endswith(".pt")]
+                assert len(model_names) > 0, "Make sure there are ckpt_*.pt files in {}".format(flags.output_dir)
+                global_step = max([int(x.split('.pt')[0].split('_')[1].strip()) for x in model_names])
+            else:
+                global_step = flags.resume_step
+            ckpt_path = os.path.join(flags.output_dir, "ckpt_{}.pt".format(global_step))
 
         # Checkpoint loading must be flow controlled across the world to avoid host OOM.
         num_loading_workers = 16
@@ -384,12 +490,20 @@ def train_bert_hdf5(flags, **kwags):
         assert(num_files > 0), "ERROR: There are no tokenized dataset shard files in {}".format(flags.data_dir)
         assert(world_size <= num_files), "ERROR: Please ensure there are at least {} (world_size) tokenized dataset shards in {} (currently I see only {}).".format(world_size, flags.data_dir, num_files)
         mini_batch_size = flags.batch_size
-
         # prep first iteration input data file
         data_file = files[(file_start_idx * world_size + rank) % num_files]
         prev_file = data_file
         train_dataloader, _ = create_pretraining_dataset(data_file, flags.max_pred_len, mini_batch_size, worker_init)
+        if flags.seq_len is not None:
+            assert flags.seq_len == train_dataloader.dataset.sequence_length, (
+                f"ERROR: User-specified sequence length ({flags.seq_len}) does not match "
+                f"that of the pre-tokenized dataset ({train_dataloader.dataset.sequence_length})"
+            )
         train_device_loader = pl.MpDeviceLoader(train_dataloader, device)
+        if is_root:
+            metric_writer.store_parameters(
+                {"Sequence length": train_dataloader.dataset.sequence_length}
+            )
 
         # use DP dataloader
         for f in range(file_start_idx + 1, len(files)):
@@ -402,29 +516,19 @@ def train_bert_hdf5(flags, **kwags):
             global_step, training_ustep, running_loss, final_loss = train_loop_fn(
                 model, optimizer, train_device_loader, epoch, global_step, training_ustep, running_loss)
 
-            if is_root :
+            if is_root and not extract_graphs_only:
                 final_time = time.time()
                 time_diff = final_time - train_start
-                perf = flags.batch_size * training_ustep * world_size / time_diff
                 print('Epoch {} step {} file index {} end {} loss {} perf {} seq/sec (at train microstep {} time {} from beginning time {})'.format(
-                    epoch, global_step, f, time.asctime(), final_loss, perf, global_step, training_ustep, final_time, train_start), flush=True)
-                metrics = {"num_workers": world_size,
-                        "epoch": epoch,
-                        "steps": global_step,
-                        "microsteps": training_ustep,
-                        "loss": final_loss,
-                        "train_time_minutes": time_diff/60,
-                        "throughput_average" : perf,
-                        "throughput_peak" : logger.throughput_peak,
-                        "batch_size" : flags.batch_size,
-                        "max_length" : flags.seq_len
-                        }
-                tm = TrainingMetrics(flags.metrics_file)
-                tm.update(**metrics)
+                    epoch, global_step, f, time.asctime(), final_loss, logger.throughputs[-1], training_ustep, final_time, train_start), flush=True)
+                additional_data = {"Epoch": epoch, "Global step": global_step, "Microstep": training_ustep, "File index": f}
+                metric_data = [
+                    Metric("Loss", final_loss, "", additional_data),
+                    Metric("Throughput", logger.throughputs[-1], "seq/s", additional_data)
+                ]
+                metric_writer.store_metrics(metric_data)
 
                 if (f % flags.shards_per_ckpt == 0) or (global_step >= flags.steps_this_run):
-                    if not os.path.exists(flags.output_dir):
-                        os.makedirs(flags.output_dir, exist_ok=True)
                     if flags.phase2:
                         chkpt_file = os.path.join(flags.output_dir, "ckpt_{}.pt".format(global_step + flags.phase1_end_step))
                     else:
@@ -453,6 +557,19 @@ def train_bert_hdf5(flags, **kwags):
                             print('Keeping only {} checkpoints. Deleting {}'.format(flags.num_ckpts_to_keep, old_file))
                             os.remove(old_file)
             if global_step >= flags.steps_this_run:
+                if is_root and not extract_graphs_only:
+                    # record aggregate & final statistics in the metrics file
+                    additional_data = {
+                        "Epoch": epoch, "Global step": global_step, "Microstep": training_ustep
+                    }
+                    average_throughput = round(sum(logger.throughputs)/len(logger.throughputs), 4)
+                    metric_data = [
+                        Metric("Final loss", final_loss, "", additional_data),
+                        Metric("Time to train", round(time_diff/60, 4), "minutes", additional_data),
+                        Metric("Average throughput", average_throughput, "seq/s", additional_data),
+                        Metric("Peak throughput", max(logger.throughputs), "seq/s", additional_data)
+                    ]
+                    metric_writer.store_metrics(metric_data)
                 return
             del train_device_loader
             del train_dataloader
@@ -472,19 +589,19 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str, default='~/examples_datasets/bert_pretrain_wikicorpus_tokenized_hdf5_seqlen128/', help="Pre-tokenized HDF5 dataset directory.")
     parser.add_argument('--output_dir', type=str, default='./output', help="Directory for checkpoints and logs.")
-    parser.add_argument('--metrics_file', type=str, default='results.json',
-            help="training metrics results file")
+    parser.add_argument('--metrics_file', type=str, default='results.json', help="training metrics results file")
     parser.add_argument('--batch_size', type=int, default=8, help="Worker batch size. (for GPU use 64; for Trainium 12)")
     parser.add_argument('--max_steps', type=int, default=28125, help="Maximum total accumulation-steps to run.")
     parser.add_argument('--steps_this_run', type=int, default=-1, help="Exit early at <value> steps and not go to max_steps. -1 to mean no early exit.")
-    parser.add_argument('--shards_per_ckpt', type=int, default=1, help="Number of dataset shards before saving checkpoing.")
+    parser.add_argument('--shards_per_ckpt', type=int, default=1, help="Number of dataset shards before saving checkpoint.")
     parser.add_argument('--seed', type=int, default=12349, help="Random seed. Worker seed is this value + worker rank.")
     parser.add_argument('--lr', type=float, default=4e-4, help="Learning rate.")
-    parser.add_argument("--seq_len", type=int, default=128, help="Sequence length")
+    parser.add_argument("--seq_len", type=int, default=None, help="Sequence length; if specified, must match that of the pre-tokenized dataset, else derived from the dataset (via `--data_dir`)")
     parser.add_argument("--debug", action="store_true", help="Debug mode to help debug scripting.")
     parser.add_argument("--max_pred_len", type=int, default=20, help="Maximum length of masked tokens in each input sequence.")
     parser.add_argument("--num_ckpts_to_keep", type=int, default=1, help="Keep last N checkpoints only. -1 is to keep all.")
     parser.add_argument('--resume_ckpt', action="store_true", help="Resume from checkpoint at resume_step.")
+    parser.add_argument('--resume_ckpt_path', help="Checkpoint file to use rather than default. If not specified, then resume from last checkpoint or at resume_step (default file output/ckpt_<step>.pt).")
     parser.add_argument('--resume_step', type=int, default=-1, help="Accumulated step to resume. Checkpoint file corresponding to accumulation-step count must exist. -1 means find the last checkpoint.")
     parser.add_argument("--warmup_steps", type=int, default=2000, help="Number of warmup accumulation-steps for learning rate .")
     parser.add_argument("--grad_accum_usteps", type=int, default=64, help="Gradient accumulation micro-steps (an accumulation-step has <value> micro-steps.")
@@ -493,6 +610,7 @@ if __name__ == '__main__':
     parser.add_argument('--enable_pt_autocast', action="store_true", help="Enable pytorch autocast.")
     parser.add_argument('--phase1_end_step', type=int, default=28125, help="Number of training steps in Phase1 - seq len 128")
     parser.add_argument('--phase2', default=False, action='store_true', help="Whether to train with seq len 512")
+    parser.add_argument('--print_grad_norm', default=False, action='store_true', help="Whether to print grad norm")
     args = parser.parse_args(sys.argv[1:])
 
     if args.steps_this_run < 0:
