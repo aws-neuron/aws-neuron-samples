@@ -426,7 +426,9 @@ def train_bert_hdf5(flags):
     if flags.resume_ckpt:
         if flags.resume_ckpt_path:
             ckpt_path = flags.resume_ckpt_path
-            global_step = int(ckpt_path.split('.pt')[0].split('_')[1].strip())
+            assert (os.path.exists(ckpt_path)), "Checkpoint path passed to resume_ckpt_path option is not a path: {}".format(ckpt_path)
+            ckpt_file = os.path.basename(ckpt_path)
+            global_step = int(ckpt_file.split('.pt')[0].split('_')[1].strip())
         else:
             if flags.resume_step == -1 or flags.phase2:
                 assert (os.path.exists(flags.output_dir) and os.path.isdir(flags.output_dir)), \
