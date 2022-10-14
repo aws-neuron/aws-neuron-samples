@@ -17,7 +17,7 @@ Samples are organized by use case (training, inference) and deep learning framew
 | Framework | Description | Instance Type |
 | --- | --- | --- |
 | [PyTorch Neuron (torch-neuron)](torch-neuron) | Sample Jupyter notebooks demonstrating model compilation and inference for various PyTorch models on AWS Inferentia | Inf1 |
-| [TensorFlow Neuron (tensorflow-neuronx)](tensorflow-neuron) | Sample Jupyter notebooks demonstrating model compilation and inference for various TensorFlow models on AWS Inferentia | Inf1 |
+| [TensorFlow Neuron (tensorflow-neuron)](tensorflow-neuron) | Sample Jupyter notebooks demonstrating model compilation and inference for various TensorFlow models on AWS Inferentia | Inf1 |
 
 ## Getting Help
 
