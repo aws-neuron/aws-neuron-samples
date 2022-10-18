@@ -5,6 +5,6 @@
     * Added 2 pytorch inference examples for Inf1 under torch-neuronx.
 
 # Known Issues
-  - Issue 1
-    * need to be added.
+
+
 
