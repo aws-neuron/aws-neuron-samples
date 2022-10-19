@@ -26,3 +26,9 @@ If you encounter issues with any of the samples in this repository, please open 
 ## Contributing
 
 Please refer to the [CONTRIBUTING](CONTRIBUTING.md) document for details on contributing additional samples to this repository.
+
+
+## Release Notes
+
+Please refer to the [Change Log](releasenotes.md)
+
