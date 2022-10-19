@@ -10,3 +10,4 @@ sentencepiece != 0.1.92
 protobuf
 h5py
 requests
+numpy<=1.20.0
