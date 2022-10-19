@@ -30,5 +30,5 @@ Please refer to the [CONTRIBUTING](CONTRIBUTING.md) document for details on cont
 
 ## Release Notes
 
-Please refer to the [Change Log](releasenotes.md)
+Please refer to the [Change Log](releasenotes.md).
 
