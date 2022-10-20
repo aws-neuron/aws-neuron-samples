@@ -10,3 +10,4 @@ The following samples are available:
 | --- | --- | --- |
 | [dp_bert_hf_pretrain](training/dp_bert_hf_pretrain) | Phase1 and phase2 pretraining of Hugging Face BERT-large model | DataParallel |
 | [mnist_mlp](training/mnist_mlp) | Examples of training a multilayer perceptron on the MNIST dataset | DataParallel |
+| [hf_language_modeling](training/hf_language_modeling) | Fine-tuning various Hugging Face models for causal language modeling (CLM) | DataParallel |
