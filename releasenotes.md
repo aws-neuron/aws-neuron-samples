@@ -1,6 +1,6 @@
 # Change Log
 ## October,20th 2022
-* Added 7 pytorch training examples for Trn1 under torch-neuronx.
+* Added 7 Pytorch training examples for Trn1 under torch-neuronx.
 
 ## October,10th 2022
 
