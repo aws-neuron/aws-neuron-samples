@@ -6,6 +6,7 @@ The following models are currently supported and tested with AWS Trainium:
 - [BERT base cased](BertBaseCased.ipynb)
 - [BERT base uncased](BertBaseUncased.ipynb)
 - [BERT large cased](BertLargeCased.ipynb)
+- [BERT large uncased](BertLargeUncased.ipynb)
 - [RoBERTa base](RobertaBase.ipynb)
 - [RoBERTa large](RobertaLarge.ipynb)
 - [XLM RoBERTa base](XlmRobertaBase.ipynb)
