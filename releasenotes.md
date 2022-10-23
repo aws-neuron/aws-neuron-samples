@@ -1,5 +1,6 @@
 # Change Log
-## October,20th 2022
+## October,27th 2022
+* Added HuggingFace GPT2 training examples for Trn1 under torch-neuronx.
 * Added 7 Pytorch training examples for Trn1 under torch-neuronx.
 
 ## October,10th 2022

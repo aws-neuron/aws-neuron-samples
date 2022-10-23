@@ -24,8 +24,10 @@ WARMUP_STEPS = 2
 BATCH_SIZE = 32
 
 # Load MNIST train dataset
-train_dataset = mnist.MNIST(root='./MNIST_DATA_train',
+if not xm.is_master_ordinal(): xm.rendezvous('dataset_download')
+train_dataset = mnist.MNIST(root='/tmp/MNIST_DATA_train',
                             train=True, download=True, transform=ToTensor())
+if xm.is_master_ordinal(): xm.rendezvous('dataset_download')
 
 def main():
     # XLA MP: get world size
