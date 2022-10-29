@@ -61,4 +61,7 @@ else
     success=0
 fi
 
+# copy final checkpoint for ph2
+if [ -e $OUTPUT_DIR/ckpt_28125.pt ]; then cp -f $OUTPUT_DIR/ckpt_28125.pt ../; fi
+
 exit $ret_val
