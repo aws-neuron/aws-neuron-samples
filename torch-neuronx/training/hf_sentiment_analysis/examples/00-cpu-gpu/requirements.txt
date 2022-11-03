@@ -1,5 +1,3 @@
 datasets
-evaluate
 tqdm
-sklearn
 transformers

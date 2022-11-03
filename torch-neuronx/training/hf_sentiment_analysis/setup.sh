@@ -25,3 +25,5 @@ pip install torch==1.11.0
 pip install "numpy<=1.20.0" "protobuf<4"
 pip install torch-neuronx==1.11.0.1.*
 pip install neuronx-cc==2.*
+
+echo 'export PATH=/opt/aws/neuron/bin/:$PATH' >>~/.bash_profile

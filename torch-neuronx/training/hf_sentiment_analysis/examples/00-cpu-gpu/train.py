@@ -12,15 +12,20 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification, get_
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+model_name = "bert-base-cased"
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
 num_epochs = 6
 batch_size = 8
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
 logger.info("Device: {}".format(device))
 
-def tokenize_and_encode(examples):
-    results = tokenizer(examples["text"], padding="max_length", truncation=True)
+## tokenize_and_encode
+# params:
+#   data: DatasetDict
+# This method returns a dictionary of input_ids, token_type_ids, attention_mask
+def tokenize_and_encode(data):
+    results = tokenizer(data["text"], padding="max_length", truncation=True)
     return results
 
 if __name__ == '__main__':
@@ -39,14 +44,18 @@ if __name__ == '__main__':
 
     hg_dataset = DatasetDict({"train": train_dataset})
 
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+    ## Loading Hugging Face AutoTokenizer for the defined model
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     ds_encoded = hg_dataset.map(tokenize_and_encode, batched=True, remove_columns=["text"])
 
     ds_encoded.set_format("torch")
 
+    ## Creating a DataLoader object for iterating over it during the training epochs
     train_dl = DataLoader(ds_encoded["train"], shuffle=True, batch_size=batch_size)
-    model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=3).to(device)
+
+    ## Loading Hugging Face pre-trained model for sequence classification for the defined model
+    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=3).to(device)
 
     current_timestamp = strftime("%Y-%m-%d-%H-%M", gmtime())
 
@@ -60,6 +69,7 @@ if __name__ == '__main__':
 
     logger.info("Start training: {}".format(strftime("%Y-%m-%d %H:%M:%S", gmtime())))
 
+    ## Start model training and defining the training loop
     model.train()
     for epoch in range(num_epochs):
         for batch in train_dl:

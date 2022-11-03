@@ -11,8 +11,6 @@ In this repository, we are sharing some code examples for:
 2. Train BERT ML model by using PyTorch and Hugging Face on a [single Neuron Core](./examples/01-trainium-single-core/train.py)
 3. Distributed training of BERT ML model by using PyTorch and Hugging Face on [all the available Neuron Cores](./examples/02-trainium-distributed-training/train.py)
 
-
-
 ## Infrastructure Setup for AWS Trainium
 
 For facilitating the setup of AWS Trainium-based Amazon EC2 instances, we are providing a [configuration script](./setup.sh) 
