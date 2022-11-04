@@ -1,5 +1,9 @@
 # Change Log
 
+## November, 7th 2022
+
+* Added Fine-tuning Hugging Face BERT Japanese model sample
+
 ## November,4th 2022
 * Added HuggingFace Vision Transformer (ViT)training examples for Trn1 under torch-neuronx.
 
