@@ -13,3 +13,4 @@ The following samples are available:
 | [hf_text_classification](training/hf_text_classification) | Fine-tuning various Hugging Face models for a text classification task | DataParallel |
 | [hf_image_classification](training/hf_image_classification) | Fine-tuning Hugging Face models (ex. ViT) for a image classification task | DataParallel |
 | [hf_language_modeling](training/hf_language_modeling) | Training Hugging Face models (ex. GPT2) for causal language modeling (CLM) | DataParallel |
+| [hf_bert_jp](training/hf_bert_jp_text_classification) | Fine-tuning Hugging Face BERT Japanese model | DataParallel |
