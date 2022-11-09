@@ -42,6 +42,8 @@ if [ ! -z "$SLURM_NTASKS" ]; then
     echo $DISTRIBUTED_ARGS
     OUTPUT_DIR=output_$SLURM_JOB_ID
     LOG_FILE=${LOG_FILE}_${RANK_NODE}_${WORLD_SIZE_JOB}
+    CACHE_DIR=$HOME/neuron_cache/bert/`hostname`
+    export NEURON_CC_FLAGS="--cache_dir=$CACHE_DIR"
 fi
 
 HOST=`hostname`
