@@ -68,7 +68,7 @@ from concurrent.futures import ThreadPoolExecutor
 import inspect
 import requests
 import gc
-os.environ["NEURON_CC_FLAGS"] = "--model-type=transformer"
+os.environ["NEURON_CC_FLAGS"] =  os.environ.get('NEURON_CC_FLAGS', '') + " --model-type=transformer"
 
 # For PT autocast.
 torch.cuda.is_bf16_supported = lambda: True
@@ -607,7 +607,6 @@ if __name__ == '__main__':
     parser.add_argument('--resume_step', type=int, default=-1, help="Accumulated step to resume. Checkpoint file corresponding to accumulation-step count must exist. -1 means find the last checkpoint.")
     parser.add_argument("--warmup_steps", type=int, default=2000, help="Number of warmup accumulation-steps for learning rate .")
     parser.add_argument("--grad_accum_usteps", type=int, default=64, help="Gradient accumulation micro-steps (an accumulation-step has <value> micro-steps.")
-    parser.add_argument("--local_rank", type=int, default=0, help="local rank passed in")
     parser.add_argument('--minimal_ckpt', default=False, action='store_true', help="When specified, don't store optimizer/lr-schedule states in checkpoints.")
     parser.add_argument('--enable_pt_autocast', action="store_true", help="Enable pytorch autocast.")
     parser.add_argument('--phase1_end_step', type=int, default=28125, help="Number of training steps in Phase1 - seq len 128")
