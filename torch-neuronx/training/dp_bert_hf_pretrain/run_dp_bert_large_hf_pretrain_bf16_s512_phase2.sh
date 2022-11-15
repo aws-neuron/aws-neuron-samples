@@ -44,6 +44,7 @@ if [ ! -z "$SLURM_NTASKS" ]; then
     LOG_FILE=${LOG_FILE}_${RANK_NODE}_${WORLD_SIZE_JOB}
     CACHE_DIR=$HOME/neuron_cache/bert/`hostname`
     export NEURON_CC_FLAGS="--cache_dir=$CACHE_DIR"
+    export TRANSFORMERS_CACHE=$HOME/hf_cache/`hostname`/hub
 fi
 
 HOST=`hostname`
