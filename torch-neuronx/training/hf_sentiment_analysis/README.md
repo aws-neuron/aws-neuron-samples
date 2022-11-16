@@ -26,7 +26,7 @@ In this repository, we are sharing some code examples for:
 git --version
 ```
 
-### Activate pre-built pytorch environment
+### Activate pre-built PyTorch environment
 
 ```
 source /opt/aws_neuron_venv_pytorch/bin/activate
@@ -42,7 +42,7 @@ neuron-top
 
 ## ML Training on single Neuron Core
 
-Activate [pre-built pytorch environment](#activate-pre-built-pytorch-environment) 
+Activate [pre-built PyTorch environment](#activate-pre-built-pytorch-environment) 
 
 Test the code execution by using the provided [notebook](./01-hf-single-neuron.ipynb)
 
@@ -56,7 +56,7 @@ python3 train.py
 
 ## Distributed Training on all available Neuron Cores
 
-Activate [pre-built pytorch environment](#activate-pre-built-pytorch-environment) 
+Activate [pre-built PyTorch environment](#activate-pre-built-pytorch-environment) 
 
 Test the code execution by using the provided [notebook](./02-hf-distributed-training.ipynb)
 
