@@ -10,3 +10,4 @@ The following models are currently supported and tested with AWS Trainium:
 - [RoBERTa base](RobertaBase.ipynb)
 - [RoBERTa large](RobertaLarge.ipynb)
 - [XLM RoBERTa base](XlmRobertaBase.ipynb)
+- [AlBERT base](AlbertBase.ipynb)
