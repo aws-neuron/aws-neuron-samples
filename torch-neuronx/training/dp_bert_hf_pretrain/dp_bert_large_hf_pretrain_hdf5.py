@@ -106,7 +106,7 @@ class TrainingMetrics:
                 elif isinstance(current, dict):
                     current.update(data)
         else:
-            result_dict[key] = data
+            result_dict["results"] = {key: data}
         with open(self.json_file, 'w') as json_file:
             json.dump(result_dict, json_file)
 
@@ -326,7 +326,7 @@ def train_bert_hdf5(flags):
     model.cls.predictions.decoder.bias = model.cls.predictions.bias
     model.train()
     model_dtype = get_dtype(model)
-    running_loss = torch.zeros(1).to(device)
+    running_loss = torch.zeros(1, dtype=torch.double).to(device)
 
     param_optimizer = list(model.named_parameters())
     no_decay = ['bias', 'LayerNorm'] # gamma/beta are in LayerNorm.weight
@@ -388,7 +388,10 @@ def train_bert_hdf5(flags):
 
             if training_ustep % flags.grad_accum_usteps == 0:
                 xm.mark_step()
-                running_loss_cpu = running_loss.detach().cpu().item()
+                # loss averaging
+                running_loss_div = running_loss / world_size
+                running_loss_reduced = xm.all_reduce(xm.REDUCE_SUM, running_loss_div)
+                running_loss_cpu = running_loss_reduced.detach().cpu().item()
                 running_loss.zero_()
                 # all-reduce and then clip. Order matters.
                 xm.reduce_gradients(optimizer)
