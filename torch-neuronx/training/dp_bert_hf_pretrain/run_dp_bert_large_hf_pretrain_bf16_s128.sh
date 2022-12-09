@@ -28,6 +28,7 @@ if [ ! -z "$SLURM_NTASKS" ]; then
     export FI_EFA_USE_DEVICE_RDMA=1
     export FI_PROVIDER=efa
     export BUCKET_CAP_MB=512
+    export XLA_TRANSFER_SEED_ASYNC=1
     WORLD_SIZE_JOB=$SLURM_NTASKS
     RANK_NODE=$SLURM_NODEID
     MASTER_ADDR=(`scontrol show hostnames $SLURM_JOB_NODELIST`)

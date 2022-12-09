@@ -73,9 +73,13 @@ os.environ["NEURON_CC_FLAGS"] =  os.environ.get('NEURON_CC_FLAGS', '') + " --mod
 # For PT autocast.
 torch.cuda.is_bf16_supported = lambda: True
 
+# Workaround for NaNs seen with transformers version >= 4.21.0
+# https://github.com/aws-neuron/aws-neuron-sdk/issues/593
+import transformers.modeling_utils as modeling_utils
+if os.environ.get("XLA_USE_BF16") or os.environ.get("XLA_DOWNCAST_BF16"):
+    modeling_utils.get_parameter_dtype = lambda x: torch.bfloat16
+
 Metric = namedtuple("Metric", ["name", "value", "units", "additional_data"])
-
-
 class TrainingMetrics:
     def __init__(self,json_file):
         self.json_file = json_file

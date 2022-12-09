@@ -1,6 +1,7 @@
 graphviz
 tensorboard==2.6
 transformers==4.15.0
+evaluate
 pillow
 pytest
 accelerate
