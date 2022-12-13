@@ -28,6 +28,7 @@ if [ ! -z "$SLURM_NTASKS" ]; then
     export FI_EFA_USE_DEVICE_RDMA=1
     export FI_PROVIDER=efa
     export BUCKET_CAP_MB=512
+    export XLA_TRANSFER_SEED_ASYNC=1
     WORLD_SIZE_JOB=$SLURM_NTASKS
     RANK_NODE=$SLURM_NODEID
     MASTER_ADDR=(`scontrol show hostnames $SLURM_JOB_NODELIST`)
@@ -50,11 +51,15 @@ if [ ! -z "$NEURON_EXTRACT_GRAPHS_ONLY" ]; then
     steps_this_run=5
 fi
 
+update_test_variables=../../load_test_variables.sh
+if [ -e $update_test_variables ]; then
+    . ./$update_test_variables $@ || echo "Unable to find test env."
+fi
 mkdir -p $OUTPUT_DIR
 if [ -z "$json" ]; then json="$OUTPUT_DIR/results.json" && rm -f $json; fi
 
 sudo sysctl -w net.ipv4.ip_local_reserved_ports=48620 || exit 1
-XLA_USE_BF16=1 torchrun $DISTRIBUTED_ARGS dp_bert_large_hf_pretrain_hdf5.py --output_dir $OUTPUT_DIR --steps_this_run $steps_this_run --metrics_file $json --batch_size=$BATCH_SIZE --grad_accum_usteps=$GRAD_ACCUM_USTEPS |& tee $OUTPUT_DIR/$LOG_FILE &
+XLA_DOWNCAST_BF16=1 torchrun $DISTRIBUTED_ARGS dp_bert_large_hf_pretrain_hdf5.py --output_dir $OUTPUT_DIR --steps_this_run $steps_this_run --metrics_file $json --batch_size=$BATCH_SIZE --grad_accum_usteps=$GRAD_ACCUM_USTEPS |& tee $OUTPUT_DIR/$LOG_FILE &
 wait %1
 
 ret_val=$?
@@ -62,6 +67,15 @@ if [ $ret_val -eq 0 ]; then
     success=1
 else
     success=0
+fi
+
+if [ -z "$NEURON_EXTRACT_GRAPHS_ONLY" ]; then
+    dump_to_s3_update_json_scr=../../dump_to_s3_update_test_json.sh
+    if [ -e $dump_to_s3_update_json_scr ]; then
+        $dump_to_s3_update_json_scr $@ --key=inference_success --value=$success || echo "Unable to update test result JSON."
+    else
+        echo "WARNING: Script $dump_to_s3_update_json_scr not found. Not updating test result JSON."
+    fi
 fi
 
 # copy final checkpoint for ph2
