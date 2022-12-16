@@ -10,7 +10,8 @@ export NEURON_RT_EXEC_TIMEOUT=600
 export NEURON_RT_STOCHASTIC_ROUNDING_SEED=0
 export TF_GRPC_DEFAULT_OPTIONS=grpc.keepalive_time_ms=60000,grpc.keepalive_timeout_ms=14400000,grpc.http2.max_pings_without_data=0,grpc.http2.min_ping_interval_without_data_ms=600000
 
-INSTANCEID=`wget -q -O - http://169.254.169.254/latest/meta-data/instance-id`
+IMDS_TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"`
+INSTANCEID=`curl -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" -v http://169.254.169.254/latest/meta-data/instance-id`
 BATCH_SIZE=2
 GRAD_ACCUM_USTEPS=512
 SEQ_LEN=512
