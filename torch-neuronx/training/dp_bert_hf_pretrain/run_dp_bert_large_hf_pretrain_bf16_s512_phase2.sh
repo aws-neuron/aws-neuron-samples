@@ -64,8 +64,17 @@ fi
 mkdir -p $OUTPUT_DIR
 if [ -z "$json" ]; then json="$OUTPUT_DIR/results.json" && rm -f $json; fi
 
+if [ "$1" == "amp" ]; then
+    echo "Enable PyTorch Autocast (AMP)"
+    ADD_ARGS="--enable_pt_autocast"
+    unset XLA_DOWNCAST_BF16
+else
+    echo "Enable Full BF16 (XLA_DOWNCAST_BF16=1)"
+    ADD_ARGS=""
+    export XLA_DOWNCAST_BF16=1
+fi
 sudo sysctl -w net.ipv4.ip_local_reserved_ports=48620 || exit 1
-XLA_DOWNCAST_BF16=1 torchrun $DISTRIBUTED_ARGS dp_bert_large_hf_pretrain_hdf5.py \
+torchrun $DISTRIBUTED_ARGS dp_bert_large_hf_pretrain_hdf5.py $ADD_ARGS \
         --output_dir $OUTPUT_DIR \
         --lr $LR \
         --phase2 \
