@@ -37,7 +37,7 @@ import random
 import json
 import queue
 from typing import Any, Dict, List
-from datetime import datetime
+from datetime import datetime, timezone
 from collections import deque, namedtuple
 import torch_xla
 import torch.nn as nn
@@ -60,6 +60,7 @@ from transformers import (
     set_seed,
 )
 from transformers.optimization import get_linear_schedule_with_warmup
+from lamb import Lamb
 import copy
 from tqdm.auto import tqdm
 from typing import Dict, List, Tuple
@@ -124,7 +125,7 @@ class TrainingMetrics:
                 "MetricName": metric.name,
                 "MeasuredValue": metric.value,
                 "Units": metric.units,
-                "Timestamp": datetime.now().isoformat(),
+                "Timestamp": datetime.now(timezone.utc).isoformat(),
                 "AdditionalData": metric.additional_data,
             } for metric in metrics
         ]
@@ -172,6 +173,7 @@ class Logger:
         self.tb = SummaryWriter(os.path.join(args.output_dir,
                                              f"neuron_tblogs_{time.strftime('%m%d%y_%H%M')}"
                                              f"_{dtype_short}"
+                                             f"_{args.optimizer}"
                                              f"_w{world_size}"
                                              f"_lr{args.lr}"
                                              f"_bs{args.batch_size}"
@@ -339,8 +341,14 @@ def train_bert_hdf5(flags):
         {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
         {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
+   
+    assert flags.optimizer.lower() in ['adamw', 'lamb'], "optimizer input {} is invalid: make sure there the optimizer argument is valid: AdamW or LAMB".format(flags.optimizer)
+    if flags.optimizer.lower() == 'adamw':
+        optimizer = AdamW(optimizer_grouped_parameters, flags.lr)
+    elif flags.optimizer.lower()  == 'lamb':
+        print('Using LAMB with trust_ratio_clipping on, based on implementation from https://github.com/rwightman/pytorch-image-models/blob/master/timm/optim/lamb.py')
+        optimizer = Lamb(optimizer_grouped_parameters, flags.lr, trust_clip=True) #default turning trust_clip on
 
-    optimizer = AdamW(optimizer_grouped_parameters, flags.lr)
     optimizer.zero_grad()
 
     if is_root:
@@ -376,7 +384,7 @@ def train_bert_hdf5(flags):
 
     def train_loop_fn(model, optimizer, train_loader, epoch, global_step, training_ustep, running_loss):
         max_grad_norm = 1.0
-        running_loss_cpu = 0.0
+        running_loss_reduced_detached = torch.zeros(1, device=device)
         for i, data in enumerate(train_loader):
             training_ustep += 1
             input_ids, segment_ids, input_mask, masked_lm_labels, next_sentence_labels = data
@@ -395,16 +403,16 @@ def train_bert_hdf5(flags):
                 # loss averaging
                 running_loss_div = running_loss / world_size
                 running_loss_reduced = xm.all_reduce(xm.REDUCE_SUM, running_loss_div)
-                running_loss_cpu = running_loss_reduced.detach().cpu().item()
+                running_loss_reduced_detached = running_loss_reduced.detach()
                 running_loss.zero_()
                 # all-reduce and then clip. Order matters.
                 xm.reduce_gradients(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)  # Gradient clipping is not in AdamW anymore
                 optimizer.step()
 
-                if flags.print_grad_norm and is_root:
-                    with torch.no_grad():
-                        total_norm = 0.0
+                with torch.no_grad():
+                    total_norm = torch.zeros(1, device=device)
+                    if flags.print_grad_norm and is_root:
                         for p in model.parameters():
                             param_norm_sq = torch.square(p.grad).sum()
                             total_norm += param_norm_sq
@@ -414,20 +422,21 @@ def train_bert_hdf5(flags):
                 scheduler.step()
                 global_step += 1
 
-                if is_root and not extract_graphs_only:
-                    total_norm_cpu = None
-                    if flags.print_grad_norm:
-                        xm.mark_step()
-                        total_norm_cpu = total_norm.detach().cpu().item()
-                    #NOTE: The running_loss is the loss of the global_step
-                    logger.log(epoch, global_step, running_loss_cpu, optimizer.param_groups[0]['lr'], 
-                               throughput.get_throughput(), total_norm_cpu)
+                def _print_logs(running_loss_reduced_detached, total_norm):
+                    if is_root and not extract_graphs_only:
+                        total_norm_cpu = None
+                        if flags.print_grad_norm:
+                            total_norm_cpu = total_norm.cpu().item()
+                        #NOTE: The running_loss is the loss of the global_step
+                        logger.log(epoch, global_step, running_loss_reduced_detached.cpu().item(), optimizer.param_groups[0]['lr'], 
+                                throughput.get_throughput(), total_norm_cpu)
+                xm.add_step_closure(_print_logs, (running_loss_reduced_detached, total_norm.detach()))
                 if global_step >= flags.steps_this_run:
                     #NOTE: Prevent runtime "Call to recv failed : Broken pipe" issue
                     xm.mark_step()
                     break
 
-        return global_step, training_ustep, running_loss, running_loss_cpu
+        return global_step, training_ustep, running_loss, running_loss_reduced_detached.cpu().item()
 
     scheduler_state_dict = None
     if flags.resume_ckpt:
@@ -599,6 +608,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_dir', type=str, default='~/examples_datasets/bert_pretrain_wikicorpus_tokenized_hdf5_seqlen128/', help="Pre-tokenized HDF5 dataset directory.")
     parser.add_argument('--output_dir', type=str, default='./output', help="Directory for checkpoints and logs.")
     parser.add_argument('--metrics_file', type=str, default='results.json', help="training metrics results file")
+    parser.add_argument('--optimizer', type=str, default='AdamW', help="choose optimizer type: (default) AdamW, LAMB")
     parser.add_argument('--batch_size', type=int, default=8, help="Worker batch size.")
     parser.add_argument('--max_steps', type=int, default=28125, help="Maximum total accumulation-steps to run.")
     parser.add_argument('--steps_this_run', type=int, default=-1, help="Exit early at <value> steps and not go to max_steps. -1 to mean no early exit.")
@@ -623,6 +633,9 @@ if __name__ == '__main__':
 
     if args.steps_this_run < 0:
         args.steps_this_run = args.max_steps
+
+    if args.enable_pt_autocast:
+        os.environ["NEURON_RT_STOCHASTIC_ROUNDING_EN"] = "1"
 
     # WORLD_SIZE is set by torchrun
     if os.environ.get("WORLD_SIZE"):
