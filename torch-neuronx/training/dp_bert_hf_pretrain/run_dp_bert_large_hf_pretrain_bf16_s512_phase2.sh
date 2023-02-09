@@ -98,4 +98,3 @@ if [ -z "$NEURON_EXTRACT_GRAPHS_ONLY" ]; then
 fi
 
 exit $ret_val
-
