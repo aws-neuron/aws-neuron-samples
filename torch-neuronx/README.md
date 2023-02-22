@@ -32,3 +32,13 @@ The following samples are available for inference:
 | [GPT2](inference/hf_pretrained_gpt2_feature_extraction_on_trn1.ipynb)         | Text feature extraction                                                                          | [gpt2](https://huggingface.co/gpt2) |
 | [Vision Transformer (ViT)](inference/hf_pretrained_vit_inference_on_trn1.ipynb)         | Image classification                                                                          | [google/vit-base-patch16-224](https://huggingface.co/google/vit-base-patch16-224) |
 | [ResNet50](inference/tv_pretrained_resnet50_inference_on_trn1.ipynb)         | Image classification                                                                       | [resnet50](https://pytorch.org/vision/main/models/generated/torchvision.models.resnet50.html) |
+
+
+
+The following samples are available for LLM tensor parallel inference:
+
+| Name                                                        | Instance type |
+|-------------------------------------------------------------| --------------- |
+| [facebook/opt-13b](inference/facebook-opt-13b-sampling.ipynb) | Inf2 & Trn1 |
+| [facebook/opt-30b](inference/facebook-opt-30b-sampling.ipynb) | Inf2 & Trn1 |
+| [facebook/opt-66b](inference/facebook-opt-66b-sampling.ipynb) | Inf2 |
