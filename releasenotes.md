@@ -1,5 +1,9 @@
 # Change Log
 
+## February, 23rd 2023
+* Added OPT-13B, OPT-30B, OPT-66B inference examples under transformers-neuronx
+* Added distilbert-base-uncased training/finetuning example for Trn1 under torch-neuronx
+
 ## November, 7th 2022
 
 * Added Fine-tuning Hugging Face BERT Japanese model sample
