@@ -19,7 +19,6 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
-import datasets
 import numpy as np
 import torch
 from datasets import load_dataset
@@ -34,42 +33,32 @@ from torchvision.transforms import (
     ToTensor,
 )
 
+import evaluate
 import transformers
 from transformers import (
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     AutoConfig,
-    AutoFeatureExtractor,
+    AutoImageProcessor,
     AutoModelForImageClassification,
     HfArgumentParser,
     Trainer,
     TrainingArguments,
+    set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint
-from transformers.utils import check_min_version
+from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
-# Enable torchrun
-import torch
-import torch_xla.distributed.xla_backend
-if os.environ.get("WORLD_SIZE"):
-    torch.distributed.init_process_group('xla')
-
-# Fixup to enable distributed training with XLA
-orig_wrap_model = Trainer._wrap_model
-def _wrap_model(self, model, training=True):
-    self.args.local_rank = -1
-    return orig_wrap_model(self, model, training)
-Trainer._wrap_model = _wrap_model
-
-# Workaround "NCCL WARN Timeout" issue (see Known Issues section in :ref:`Release Notes <torch-neuronx-rn>`)
-# os.environ["NEURON_CCOM_SOCK_TIMEOUT"] = "1200"
 
 """ Fine-tuning a 🤗 Transformers model for image classification"""
+
+from transformers import __version__, Trainer
+Trainer._wrap_model = lambda self, model, training=True, dataloader=None: model
 
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.16.0")
+check_min_version("4.26.0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/image-classification/requirements.txt")
 
@@ -87,13 +76,15 @@ def pil_loader(path: str):
 class DataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
-    Using `HfArgumentParser` we can turn this class
-    into argparse arguments to be able to specify them on
-    the command line.
+    Using `HfArgumentParser` we can turn this class into argparse arguments to be able to specify
+    them on the command line.
     """
 
     dataset_name: Optional[str] = field(
-        default="nateraw/image-folder", metadata={"help": "Name of a dataset from the datasets package"}
+        default=None,
+        metadata={
+            "help": "Name of a dataset from the hub (could be your own, possibly private dataset hosted on the hub)."
+        },
     )
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
@@ -106,25 +97,27 @@ class DataTrainingArguments:
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+                "value if set."
+            )
         },
     )
 
     def __post_init__(self):
-        data_files = dict()
-        if self.train_dir is not None:
-            data_files["train"] = self.train_dir
-        if self.validation_dir is not None:
-            data_files["val"] = self.validation_dir
-        self.data_files = data_files if data_files else None
+        if self.dataset_name is None and (self.train_dir is None and self.validation_dir is None):
+            raise ValueError(
+                "You must specify either a dataset name from the hub or a train and/or validation directory."
+            )
 
 
 @dataclass
@@ -151,13 +144,19 @@ class ModelArguments:
         default="main",
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
-    feature_extractor_name: str = field(default=None, metadata={"help": "Name or path of preprocessor config."})
+    image_processor_name: str = field(default=None, metadata={"help": "Name or path of preprocessor config."})
     use_auth_token: bool = field(
         default=False,
         metadata={
-            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-            "with private models)."
+            "help": (
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
+                "with private models)."
+            )
         },
+    )
+    ignore_mismatched_sizes: bool = field(
+        default=False,
+        metadata={"help": "Will enable to load a pretrained model whose head dimensions are different."},
     )
 
 
@@ -179,6 +178,10 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_image_classification", model_args, data_args)
 
     # Setup logging
     logging.basicConfig(
@@ -215,32 +218,48 @@ def main():
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
             )
 
+    # Set seed before initializing model.
+    set_seed(training_args.seed)
+
     # Initialize our dataset and prepare it for the 'image-classification' task.
-    ds = load_dataset(
-        data_args.dataset_name,
-        data_args.dataset_config_name,
-        data_files=data_args.data_files,
-        cache_dir=model_args.cache_dir,
-        task="image-classification",
-    )
+    if data_args.dataset_name is not None:
+        dataset = load_dataset(
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            cache_dir=model_args.cache_dir,
+            task="image-classification",
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
+    else:
+        data_files = {}
+        if data_args.train_dir is not None:
+            data_files["train"] = os.path.join(data_args.train_dir, "**")
+        if data_args.validation_dir is not None:
+            data_files["validation"] = os.path.join(data_args.validation_dir, "**")
+        dataset = load_dataset(
+            "imagefolder",
+            data_files=data_files,
+            cache_dir=model_args.cache_dir,
+            task="image-classification",
+        )
 
     # If we don't have a validation split, split off a percentage of train as validation.
-    data_args.train_val_split = None if "validation" in ds.keys() else data_args.train_val_split
+    data_args.train_val_split = None if "validation" in dataset.keys() else data_args.train_val_split
     if isinstance(data_args.train_val_split, float) and data_args.train_val_split > 0.0:
-        split = ds["train"].train_test_split(data_args.train_val_split)
-        ds["train"] = split["train"]
-        ds["validation"] = split["test"]
+        split = dataset["train"].train_test_split(data_args.train_val_split)
+        dataset["train"] = split["train"]
+        dataset["validation"] = split["test"]
 
     # Prepare label mappings.
     # We'll include these in the model's config to get human readable labels in the Inference API.
-    labels = ds["train"].features["labels"].names
+    labels = dataset["train"].features["labels"].names
     label2id, id2label = dict(), dict()
     for i, label in enumerate(labels):
         label2id[label] = str(i)
         id2label[str(i)] = label
 
     # Load the accuracy metric from the datasets package
-    metric = datasets.load_metric("accuracy")
+    metric = evaluate.load("accuracy")
 
     # Define our compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with a
     # predictions and label_ids field) and has to return a dictionary string to float.
@@ -265,19 +284,24 @@ def main():
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
+        ignore_mismatched_sizes=model_args.ignore_mismatched_sizes,
     )
-    feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.feature_extractor_name or model_args.model_name_or_path,
+    image_processor = AutoImageProcessor.from_pretrained(
+        model_args.image_processor_name or model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
 
     # Define torchvision transforms to be applied to each image.
-    normalize = Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std)
+    if "shortest_edge" in image_processor.size:
+        size = image_processor.size["shortest_edge"]
+    else:
+        size = (image_processor.size["height"], image_processor.size["width"])
+    normalize = Normalize(mean=image_processor.image_mean, std=image_processor.image_std)
     _train_transforms = Compose(
         [
-            RandomResizedCrop(feature_extractor.size),
+            RandomResizedCrop(size),
             RandomHorizontalFlip(),
             ToTensor(),
             normalize,
@@ -285,8 +309,8 @@ def main():
     )
     _val_transforms = Compose(
         [
-            Resize(feature_extractor.size),
-            CenterCrop(feature_extractor.size),
+            Resize(size),
+            CenterCrop(size),
             ToTensor(),
             normalize,
         ]
@@ -305,31 +329,33 @@ def main():
         return example_batch
 
     if training_args.do_train:
-        if "train" not in ds:
+        if "train" not in dataset:
             raise ValueError("--do_train requires a train dataset")
         if data_args.max_train_samples is not None:
-            ds["train"] = ds["train"].shuffle(seed=training_args.seed).select(range(data_args.max_train_samples))
+            dataset["train"] = (
+                dataset["train"].shuffle(seed=training_args.seed).select(range(data_args.max_train_samples))
+            )
         # Set the training transforms
-        ds["train"].set_transform(train_transforms)
+        dataset["train"].set_transform(train_transforms)
 
     if training_args.do_eval:
-        if "validation" not in ds:
+        if "validation" not in dataset:
             raise ValueError("--do_eval requires a validation dataset")
         if data_args.max_eval_samples is not None:
-            ds["validation"] = (
-                ds["validation"].shuffle(seed=training_args.seed).select(range(data_args.max_eval_samples))
+            dataset["validation"] = (
+                dataset["validation"].shuffle(seed=training_args.seed).select(range(data_args.max_eval_samples))
             )
         # Set the validation transforms
-        ds["validation"].set_transform(val_transforms)
+        dataset["validation"].set_transform(val_transforms)
 
     # Initalize our trainer
     trainer = Trainer(
         model=model,
         args=training_args,
-        train_dataset=ds["train"] if training_args.do_train else None,
-        eval_dataset=ds["validation"] if training_args.do_eval else None,
+        train_dataset=dataset["train"] if training_args.do_train else None,
+        eval_dataset=dataset["validation"] if training_args.do_eval else None,
         compute_metrics=compute_metrics,
-        tokenizer=feature_extractor,
+        tokenizer=image_processor,
         data_collator=collate_fn,
     )
 
@@ -357,7 +383,7 @@ def main():
         "finetuned_from": model_args.model_name_or_path,
         "tasks": "image-classification",
         "dataset": data_args.dataset_name,
-        "tags": ["image-classification"],
+        "tags": ["image-classification", "vision"],
     }
     if training_args.push_to_hub:
         trainer.push_to_hub(**kwargs)

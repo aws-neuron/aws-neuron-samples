@@ -32,9 +32,11 @@ def tokenize_and_encode(data):
     return results
 
 if __name__ == '__main__':
+    path = os.path.abspath("data")
+    csv_path = path + "/train.csv"
 
     train = pd.read_csv(
-        "./../../data/train.csv",
+        csv_path,
         sep=',',
         quotechar='"',
         quoting=csv.QUOTE_ALL,

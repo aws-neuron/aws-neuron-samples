@@ -34,3 +34,9 @@ Please refer to the [CONTRIBUTING](CONTRIBUTING.md) document for details on cont
 
 Please refer to the [Change Log](releasenotes.md).
 
+## Known Issues
+
+| Model | Framework | Training/Inference | Instance Type | Status |
+| --- | --- | --- | --- | --- |
+| Fairseq | PyTorch | Inference | Inf1 | RuntimeError: No operations were successfully partitioned and compiled to neuron for this model - aborting trace! |
+| Yolof | PyTorch | Inference | Inf1 | RuntimeError: No operations were successfully partitioned and compiled to neuron for this model - aborting trace! |
