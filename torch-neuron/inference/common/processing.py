@@ -30,7 +30,7 @@ if os.path.exists(yolov5_path):
     # https://pytorch.org/hub/ultralytics_yolov5/
     try:
         from utils.augmentations import letterbox
-        from utils.general import non_max_suppression, scale_coords
+        from utils.general import non_max_suppression, scale_segments
         from utils.plots import Annotator, colors
     except Exception as e:
         pass
@@ -60,7 +60,7 @@ def postprocess_yolov5(predictions, raw_img, size=(640,640)):
     det = non_max_suppression(predictions)[0]
     img = raw_img.copy()
     annotator = Annotator(img, line_width=3, example=str(labels))
-    det[:, :4] = scale_coords(size, det[:, :4], img.shape).round()
+    det[:, :4] = scale_segments(size, det[:, :4], img.shape).round()
     # Write results
     for *xyxy, conf, cls in reversed(det):
         c = int(cls)  # integer class        
