@@ -28,6 +28,7 @@ fi
 if [ ! -z "$SLURM_NTASKS" ]; then
     export FI_EFA_USE_DEVICE_RDMA=1
     export FI_PROVIDER=efa
+    export FI_EFA_FORK_SAFE=1
     export BUCKET_CAP_MB=512
     export XLA_TRANSFER_SEED_ASYNC=1
     WORLD_SIZE_JOB=$SLURM_NTASKS
