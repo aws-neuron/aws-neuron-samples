@@ -26,6 +26,7 @@ NUM_NEURONCORES=32
 DISTRIBUTED_ARGS="--nproc_per_node $NUM_NEURONCORES"
 OUTPUT_DIR=output
 LOG_FILE=log_ph2_bf16
+expected_average_throughput=0.0
 if [ ! -z "$NEURON_EXTRACT_GRAPHS_ONLY" ]; then
    LOG_FILE=${LOG_FILE}_compile
 fi
@@ -48,6 +49,8 @@ if [ ! -z "$SLURM_NTASKS" ]; then
     CACHE_DIR=$HOME/neuron_cache/bert/`hostname`
     export NEURON_CC_FLAGS="--cache_dir=$CACHE_DIR"
     export TRANSFORMERS_CACHE=$HOME/hf_cache/`hostname`/hub
+    # HF ver > 4.22: Move cache ahead of time to prevent multiple workers moving at the same time
+    python -c "import transformers.utils as utils; utils.move_cache()"
 fi
 
 HOST=`hostname`
@@ -69,6 +72,10 @@ if [ "$1" == "amp" ]; then
     echo "Enable PyTorch Autocast (AMP)"
     ADD_ARGS="--enable_pt_autocast"
     unset XLA_DOWNCAST_BF16
+elif [ "$1" == "fp32wcopy" ]; then
+    echo "Enable Full BF16 with FP32 Weights Copy"
+    ADD_ARGS="--optimizer=AdamW_WCopy"
+    export XLA_DOWNCAST_BF16=1
 else
     echo "Enable Full BF16 (XLA_DOWNCAST_BF16=1)"
     ADD_ARGS=""
@@ -89,7 +96,8 @@ torchrun $DISTRIBUTED_ARGS dp_bert_large_hf_pretrain_hdf5.py $ADD_ARGS \
         --grad_accum_usteps $GRAD_ACCUM_USTEPS \
         --max_steps $MAX_STEPS \
         --steps_this_run $steps_this_run \
-        --warmup_steps $WARM_UP |& tee $OUTPUT_DIR/$LOG_FILE &
+        --warmup_steps $WARM_UP \
+        --expected_average_throughput $expected_average_throughput |& tee $OUTPUT_DIR/$LOG_FILE &
 wait %1
 
 ret_val=$?
