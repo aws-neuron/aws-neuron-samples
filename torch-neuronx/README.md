@@ -32,7 +32,10 @@ The following samples are available for inference:
 | [GPT2](inference/hf_pretrained_gpt2_feature_extraction_on_trn1.ipynb)         | Text feature extraction                                                                          | [gpt2](https://huggingface.co/gpt2) |
 | [Vision Transformer (ViT)](inference/hf_pretrained_vit_inference_on_trn1.ipynb)         | Image classification                                                                          | [google/vit-base-patch16-224](https://huggingface.co/google/vit-base-patch16-224) |
 | [ResNet50](inference/tv_pretrained_resnet50_inference_on_trn1.ipynb)         | Image classification                                                                       | [resnet50](https://pytorch.org/vision/main/models/generated/torchvision.models.resnet50.html) |
-
+| [HuggingFace Stable Diffusion 2.1 (512x512)](inference/hf_pretrained_sd2_512_inference.ipynb)         | Computer vision                                                                       | [stable-diffusion](https://huggingface.co/stabilityai/stable-diffusion-2) |
+| [HuggingFace Stable Diffusion 2.1 (768x768)](inference/hf_pretrained_sd2_768_inference.ipynb)         | Computer vision                                                                      | [stable-diffusion](https://huggingface.co/stabilityai/stable-diffusion-2) |
+| [UNet](inference/pretrained_unet_inference_on_trn1.ipynb)         | Computer vision                                                                         | [unet](https://github.com/milesial/Pytorch-UNet) |
+| [VGG](inference/tv_pretrained_vgg_inference_on_trn1.ipynb)         | Computer vision                | [vgg](https://pytorch.org/vision/main/models/generated/torchvision.models.vgg11.html) |
 
 
 The following samples are available for LLM tensor parallel inference:
