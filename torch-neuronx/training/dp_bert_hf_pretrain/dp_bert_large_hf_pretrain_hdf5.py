@@ -60,7 +60,7 @@ from transformers import (
     set_seed,
 )
 from transformers.optimization import get_linear_schedule_with_warmup
-from lamb import Lamb
+
 import copy
 from tqdm.auto import tqdm
 from typing import Dict, List, Tuple
@@ -80,70 +80,10 @@ import transformers.modeling_utils as modeling_utils
 if os.environ.get("XLA_USE_BF16") or os.environ.get("XLA_DOWNCAST_BF16"):
     modeling_utils.get_parameter_dtype = lambda x: torch.bfloat16
 
-Metric = namedtuple("Metric", ["name", "value", "units", "additional_data"])
-class TrainingMetrics:
-    def __init__(self,json_file):
-        self.json_file = json_file
-
-    def read_modify_write_file(self, data, key: str = "metrics") -> None:
-        """
-        data (dict of training parameters or list of metrics): Data to update in the file.
-        key (str): the dictionary key under which data is to be recorded
-        """
-        result_dict = {}
-        print(f"Writing data to the provided results file: {self.json_file}")
-        if os.path.exists(self.json_file):
-            with open(self.json_file) as json_file:
-                result_dict = json.loads(json_file.read()) or result_dict
-        print(f"Updating with {key} data: {data}")
-        if result_dict:
-            try:
-                # handle internal named entity if present
-                results = result_dict[next(iter(result_dict))]
-            except Exception:
-                results = result_dict
-            current = results.get(key)
-            if not current:
-                results[key] = data
-            else:
-                if isinstance(current, list):
-                    current.extend(data)
-                elif isinstance(current, dict):
-                    current.update(data)
-        else:
-            result_dict["results"] = {key: data}
-        with open(self.json_file, 'w') as json_file:
-            json.dump(result_dict, json_file)
-
-    def store_metrics(self, metrics: List[Metric]) -> None:
-        """
-        Writes collected metrics to the file.
-
-        """
-        data = [
-            {
-                "MetricName": metric.name,
-                "MeasuredValue": metric.value,
-                "Units": metric.units,
-                "Timestamp": datetime.now(timezone.utc).isoformat(),
-                "AdditionalData": metric.additional_data,
-            } for metric in metrics
-        ]
-        self.update(data=data, key="metrics")
-
-    def store_parameters(self, parameters: Dict[str, Any]) -> None:
-        """
-        Writes specified model and configuration parameters to the file.
-
-        """
-        self.update(data=parameters, key="parameters")
-
-    def update(self, **kwargs: Any) -> None:
-        """
-        Write specified data to the output file.
-        """
-        self.read_modify_write_file(**kwargs)
-
+try:
+    from utilities.reporting import Metric, post_metrics
+except ImportError:
+    Metric = post_metrics = lambda *args, **kwargs: None
 
 class Throughput:
     def __init__(self, batch_size, world_size, grad_accum_usteps, moving_avg_window_size=10):
@@ -341,11 +281,24 @@ def train_bert_hdf5(flags):
         {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
         {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
-   
-    assert flags.optimizer.lower() in ['adamw', 'lamb'], "optimizer input {} is invalid: make sure there the optimizer argument is valid: AdamW or LAMB".format(flags.optimizer)
-    if flags.optimizer.lower() == 'adamw':
+
+    optimizer_type = flags.optimizer
+    if optimizer_type == 'AdamW':
         optimizer = AdamW(optimizer_grouped_parameters, flags.lr)
-    elif flags.optimizer.lower()  == 'lamb':
+    elif optimizer_type == 'AdamW_FP32OptimParams':
+        try:
+            from adamw_fp32_optim_params import AdamW as AdamW_FP32OptimParams
+        except ImportError as ex:
+            print(f'{optimizer_type} selected but no AdamW with FP32 optimizer parameters implementation is available. Please make sure adamw_fp32_optim_params.py exists in the same dir.')
+            raise ex
+        print('Using AdamW with FP32 copy of weights')
+        optimizer = AdamW_FP32OptimParams(optimizer_grouped_parameters, flags.lr)
+    elif optimizer_type == 'LAMB':
+        try:
+            from lamb import Lamb
+        except ImportError:
+            print(f'{optimizer_type} selected but no LAMB implementation is available. Please make sure lamb.py exists in the same dir.')
+            raise ex
         print('Using LAMB with trust_ratio_clipping on, based on implementation from https://github.com/rwightman/pytorch-image-models/blob/master/timm/optim/lamb.py')
         optimizer = Lamb(optimizer_grouped_parameters, flags.lr, trust_clip=True) #default turning trust_clip on
 
@@ -356,31 +309,28 @@ def train_bert_hdf5(flags):
             os.makedirs(flags.output_dir, exist_ok=True)
         if not extract_graphs_only:
             logger = Logger(flags, world_size, model_dtype)
-        metric_writer = TrainingMetrics(flags.metrics_file)
         throughput = Throughput(flags.batch_size, xm.xrt_world_size(), flags.grad_accum_usteps)
         print('--------TRAINING CONFIG----------')
         print(flags)
         print('--------MODEL CONFIG----------')
         print(model.config)
         print('---------------------------------')
-        metric_writer.store_parameters(
-            {
-                "Model": model.name_or_path,
-                "Model configuration": str(model.config),
-                "World size": world_size,
-                "Data parallel degree": world_size,
-                "Batch size": flags.batch_size,
-                "Total steps": flags.steps_this_run,
-                "Seed": flags.seed,
-                "Optimizer": str(optimizer),
-                "Data type": model_dtype,
-                "Gradient accumulation microsteps": flags.grad_accum_usteps,
-                "Warmup steps": flags.warmup_steps,
-                "Shards per checkpoint": flags.shards_per_ckpt,
-                "Dataset": os.path.basename(os.path.normpath(flags.data_dir)),
-                "Environment variables": {variable: value for variable, value in os.environ.items() if variable.startswith("NEURON") or variable.startswith("XLA")}
-            }
-        )
+        parameters = {
+            "Model": model.name_or_path,
+            "Model configuration": str(model.config),
+            "World size": world_size,
+            "Data parallel degree": world_size,
+            "Batch size": flags.batch_size,
+            "Total steps": flags.steps_this_run,
+            "Seed": flags.seed,
+            "Optimizer": str(optimizer),
+            "Data type": model_dtype,
+            "Gradient accumulation microsteps": flags.grad_accum_usteps,
+            "Warmup steps": flags.warmup_steps,
+            "Shards per checkpoint": flags.shards_per_ckpt,
+            "Dataset": os.path.basename(os.path.normpath(flags.data_dir)),
+            "Environment variables": {variable: value for variable, value in os.environ.items() if variable.startswith("NEURON") or variable.startswith("XLA")}
+        }
 
     def train_loop_fn(model, optimizer, train_loader, epoch, global_step, training_ustep, running_loss):
         max_grad_norm = 1.0
@@ -519,7 +469,7 @@ def train_bert_hdf5(flags):
             )
         train_device_loader = pl.MpDeviceLoader(train_dataloader, device)
         if is_root:
-            metric_writer.store_parameters(
+            parameters.update(
                 {"Sequence length": train_dataloader.dataset.sequence_length}
             )
 
@@ -541,10 +491,10 @@ def train_bert_hdf5(flags):
                     epoch, global_step, f, time.asctime(), final_loss, logger.throughputs[-1], training_ustep, final_time, train_start), flush=True)
                 additional_data = {"Epoch": epoch, "Global step": global_step, "Microstep": training_ustep, "File index": f}
                 metric_data = [
-                    Metric("Loss", final_loss, "", additional_data),
-                    Metric("Throughput", logger.throughputs[-1], "seq/s", additional_data)
+                    Metric("Loss", final_loss, units="", additional=additional_data),
+                    Metric("Throughput", logger.throughputs[-1], units="seq/s", additional=additional_data)
                 ]
-                metric_writer.store_metrics(metric_data)
+                post_metrics(metric_data, parameters=parameters)
 
                 if (f % flags.shards_per_ckpt == 0) or (global_step >= flags.steps_this_run):
                     if flags.phase2:
@@ -581,13 +531,25 @@ def train_bert_hdf5(flags):
                         "Epoch": epoch, "Global step": global_step, "Microstep": training_ustep
                     }
                     average_throughput = round(sum(logger.throughputs)/len(logger.throughputs), 4)
-                    metric_data = [
-                        Metric("Final loss", final_loss, "", additional_data),
-                        Metric("Time to train", round(time_diff/60, 4), "minutes", additional_data),
-                        Metric("Average throughput", average_throughput, "seq/s", additional_data),
-                        Metric("Peak throughput", max(logger.throughputs), "seq/s", additional_data)
-                    ]
-                    metric_writer.store_metrics(metric_data)
+                    if(flags.expected_average_throughput > 0):
+                        derived_expected_throughput = (0.95*flags.expected_average_throughput)
+                        metric_data = [
+                            Metric("FinalLoss", final_loss, units="", additional=additional_data),
+                            Metric("TimeToTrain", round(time_diff/60, 4), units="minutes", additional=additional_data),
+                            Metric("AverageThroughput", average_throughput, units="seq/s", expected=flags.expected_average_throughput, derived=(0.95*flags.expected_average_throughput) ,additional=additional_data),
+                            Metric("PeakThroughput", max(logger.throughputs), units="seq/s", additional=additional_data)
+                        ]
+                        post_metrics(metric_data, parameters=parameters)
+                        assert( average_throughput >= derived_expected_throughput), "Average throughput :{} is  below derived expected threshold: {}".format(average_throughput, derived_expected_throughput)
+                    else:
+
+                        metric_data = [
+                            Metric("FinalLoss", final_loss, units="", additional=additional_data),
+                            Metric("TimeToTrain", round(time_diff/60, 4), units="minutes", additional=additional_data),
+                            Metric("AverageThroughput", average_throughput, units="seq/s", additional=additional_data),
+                            Metric("PeakThroughput", max(logger.throughputs), units="seq/s", additional=additional_data)
+                        ]
+                        post_metrics(metric_data, parameters=parameters)
                 return
             del train_device_loader
             del train_dataloader
@@ -608,7 +570,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_dir', type=str, default='~/examples_datasets/bert_pretrain_wikicorpus_tokenized_hdf5_seqlen128/', help="Pre-tokenized HDF5 dataset directory.")
     parser.add_argument('--output_dir', type=str, default='./output', help="Directory for checkpoints and logs.")
     parser.add_argument('--metrics_file', type=str, default='results.json', help="training metrics results file")
-    parser.add_argument('--optimizer', type=str, default='AdamW', help="choose optimizer type: (default) AdamW, LAMB")
+    parser.add_argument('--optimizer', type=str, default='AdamW', choices=['AdamW', 'AdamW_FP32OptimParams', 'LAMB'], help="choose optimizer type: (default) AdamW, AdamW_FP32OptimParams (optimizer params in high precision), LAMB")
     parser.add_argument('--batch_size', type=int, default=8, help="Worker batch size.")
     parser.add_argument('--max_steps', type=int, default=28125, help="Maximum total accumulation-steps to run.")
     parser.add_argument('--steps_this_run', type=int, default=-1, help="Exit early at <value> steps and not go to max_steps. -1 to mean no early exit.")
@@ -629,6 +591,7 @@ if __name__ == '__main__':
     parser.add_argument('--phase1_end_step', type=int, default=28125, help="Number of training steps in Phase1 - seq len 128")
     parser.add_argument('--phase2', default=False, action='store_true', help="Whether to train with seq len 512")
     parser.add_argument('--print_grad_norm', default=False, action='store_true', help="Whether to print grad norm")
+    parser.add_argument('--expected_average_throughput', type=float, default=0.0, help="Expected average throughput")
     args = parser.parse_args(sys.argv[1:])
 
     if args.steps_this_run < 0:
