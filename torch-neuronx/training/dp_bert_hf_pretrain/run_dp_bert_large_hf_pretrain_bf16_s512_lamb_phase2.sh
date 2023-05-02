@@ -12,16 +12,21 @@ export TF_GRPC_DEFAULT_OPTIONS=grpc.keepalive_time_ms=60000,grpc.keepalive_timeo
 
 IMDS_TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"`
 INSTANCEID=`curl -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" -v http://169.254.169.254/latest/meta-data/instance-id`
+BATCH_SIZE=2
+GRAD_ACCUM_USTEPS=512
+SEQ_LEN=512
+MAX_PRED_LEN=80
+WARM_UP=781
+MAX_STEPS=1563
+PH1_END_STEP=7032 # the steps ran for phase1
+LR=4e-3
+OPT=LAMB
 WORLD_SIZE_JOB=1
 RANK_NODE=0
-MAX_STEPS=28125
-BATCH_SIZE=16
-GRAD_ACCUM_USTEPS=32
 NUM_NEURONCORES=32
 DISTRIBUTED_ARGS="--nproc_per_node $NUM_NEURONCORES"
 OUTPUT_DIR=output
-LOG_FILE=log_ph1_bf16
-expected_average_throughput=0.0
+LOG_FILE=log_ph2_bf16
 if [ ! -z "$NEURON_EXTRACT_GRAPHS_ONLY" ]; then
    LOG_FILE=${LOG_FILE}_compile
 fi
@@ -35,7 +40,7 @@ if [ ! -z "$SLURM_NTASKS" ]; then
     WORLD_SIZE_JOB=$SLURM_NTASKS
     RANK_NODE=$SLURM_NODEID
     MASTER_ADDR=(`scontrol show hostnames $SLURM_JOB_NODELIST`)
-    MASTER_PORT=2022
+    MASTER_PORT=2023
     GRAD_ACCUM_USTEPS=$(($GRAD_ACCUM_USTEPS/$WORLD_SIZE_JOB))
     DISTRIBUTED_ARGS="--nproc_per_node $NUM_NEURONCORES --nnodes $WORLD_SIZE_JOB --node_rank $RANK_NODE --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
     echo $DISTRIBUTED_ARGS
@@ -67,18 +72,28 @@ if [ "$1" == "amp" ]; then
     echo "Enable PyTorch Autocast (AMP)"
     ADD_ARGS="--enable_pt_autocast"
     unset XLA_DOWNCAST_BF16
-elif [ "$1" == "fp32optim" ]; then
-    echo "Enable Full BF16 with FP32 optimizer parameters"
-    ADD_ARGS="--optimizer=AdamW_FP32OptimParams"
-    export XLA_DOWNCAST_BF16=1
 else
     echo "Enable Full BF16 (XLA_DOWNCAST_BF16=1)"
     ADD_ARGS=""
     export XLA_DOWNCAST_BF16=1
 fi
-
 sudo sysctl -w net.ipv4.ip_local_reserved_ports=48620 || exit 1
-torchrun $DISTRIBUTED_ARGS dp_bert_large_hf_pretrain_hdf5.py $ADD_ARGS --output_dir $OUTPUT_DIR --steps_this_run $steps_this_run --metrics_file $json --batch_size=$BATCH_SIZE --grad_accum_usteps=$GRAD_ACCUM_USTEPS --expected_average_throughput $expected_average_throughput |& tee $OUTPUT_DIR/$LOG_FILE &
+torchrun $DISTRIBUTED_ARGS dp_bert_large_hf_pretrain_hdf5.py $ADD_ARGS \
+        --output_dir $OUTPUT_DIR \
+        --lr $LR \
+        --optimizer $OPT \
+        --phase2 \
+        --resume_ckpt \
+        --resume_ckpt_path ../ckpt_7032.pt \
+        --phase1_end_step $PH1_END_STEP \
+        --batch_size $BATCH_SIZE \
+        --max_pred_len $MAX_PRED_LEN \
+        --data_dir ~/examples_datasets/bert_pretrain_wikicorpus_tokenized_hdf5_seqlen512/ \
+        --metrics_file $json \
+        --grad_accum_usteps $GRAD_ACCUM_USTEPS \
+        --max_steps $MAX_STEPS \
+        --steps_this_run $steps_this_run \
+        --warmup_steps $WARM_UP |& tee $OUTPUT_DIR/$LOG_FILE &
 wait %1
 
 ret_val=$?
@@ -96,8 +111,5 @@ if [ -z "$NEURON_EXTRACT_GRAPHS_ONLY" ]; then
         echo "WARNING: Script $dump_to_s3_update_json_scr not found. Not updating test result JSON."
     fi
 fi
-
-# copy final checkpoint for ph2
-if [ -e $OUTPUT_DIR/ckpt_28125.pt ]; then cp -f $OUTPUT_DIR/ckpt_28125.pt ../; fi
 
 exit $ret_val
