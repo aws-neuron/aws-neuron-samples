@@ -1,6 +1,6 @@
-# PyTorch Neuron (torch-neuronx) Samples for AWS Trn1
+# PyTorch Neuron (torch-neuronx) Samples for AWS Trn1/Trn1n & Inf2 Instances
 
-This directory contains sample PyTorch Neuron inference and training scripts that can be run on [AWS Trainium](https://aws.amazon.com/machine-learning/trainium/) (Trn1 instances).
+This directory contains sample PyTorch Neuron inference and training scripts that can be run on [AWS Trainium](https://aws.amazon.com/machine-learning/trainium/) (Trn1/Trn1n instances) and [AWS Inferentia]( https://aws.amazon.com/machine-learning/inferentia/) (Inf2 instances).
 
 For additional information on these training scripts, please refer to the tutorials found in the <mark>official Trainium documentation</mark>.
 
