@@ -3,15 +3,12 @@ set -o pipefail
 
 sudo rmmod neuron; sudo modprobe neuron
 sudo sysctl -w net.ipv4.ip_local_reserved_ports=44000,48620
-# ulimit -u 125149
 sudo sysctl -w kernel.threads-max=10000000
 ulimit -c unlimited
 
 NUM_NEURONCORES=32
 DISTRIBUTED_ARGS="--nproc_per_node $NUM_NEURONCORES"
 
-# Malloc bug
-#MALLOC_ARENA_MAX=1
 LD_PRELOAD="/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4"
 MALLOC_ARENA_MAX=64
 echo "MALLOC_ARENA_MAX" $MALLOC_ARENA_MAX
@@ -32,13 +29,12 @@ if [ ! -z "$SLURM_NTASKS" ]; then
     export FI_EFA_USE_DEVICE_RDMA=1
     export FI_PROVIDER=efa
     ADD_ARGS="--use_mics"
+    echo "WORLD_SIZE_JOB=$WORLD_SIZE_JOB,  RANK_NODE=$RANK_NODE,  MASTER_ADDR_JOB=$MASTER_ADDR_JOB, NODE_LIST=$NODE_LIST"
 fi
 
 #Print Slurm Config
 date;hostname;
-#echo "WORLD_SIZE_JOB=$WORLD_SIZE_JOB,  RANK_NODE=$RANK_NODE,  MASTER_ADDR_JOB=$MASTER_ADDR_JOB, NODE_LIST=$NODE_LIST"
 
-#export NEURON_NUM_DEVICES=32
 export TRAINING_PRECISION=$1 #options FP32, BF16, MIXED
 export NEURON_RT_STOCHASTIC_ROUNDING_EN=1
 
@@ -54,13 +50,12 @@ else
     export NEURON_CC_FLAGS="--retry_failed_compilation --distribution-strategy FSDP --model-type transformer"
 fi
 
-#export PARTITION_WORLD_SIZE=$NEURON_NUM_DEVICES #TODO: remove with torchneuronx MICS
+NEURON_CC_FLAGS+=" --cache_dir=$HOME/neuron_cache/gpt_2p7B_neo/`hostname`"
+
 export DISABLE_NUMERIC_CC_TOKEN=1
 export NEURON_RT_HIERARCHICAL_CC=1
 
-#TODO : FAL automatically inserts --internal-dram-page-size if RT env var is set
-#This needs to match compiler option --internal-dram-page-size if it is set
-export NEURON_RT_ONE_TMPBUF_PAGE_SIZE_MB=2048 #Need to match
+export NEURON_RT_ONE_TMPBUF_PAGE_SIZE_MB=2048
 export NEURON_RT_EXEC_TIMEOUT=600
 export TF_NUM_INTEROP_THREADS=8192
 
@@ -81,10 +76,10 @@ if [ $GRAD_ACCUM_STEP -gt 1 ]; then
 fi
 
 MAX_STEPS=100000
-LOG_FILE_NAME="run_log_hf_gpt2_param_"$MODEL_SIZE"_nodes"$WORLD_SIZE_JOB"_grad_accum"$GRAD_ACCUM_STEP"_bs"$BATCH_SIZE_$(date +"%m-%d-%Y")_$(date +"%H:%M:%S")
+LOG_FILE_NAME="run_log_hf_gpt2_neo_param_"$MODEL_SIZE"_nodes"$WORLD_SIZE_JOB"_grad_accum"$GRAD_ACCUM_STEP"_bs"$BATCH_SIZE_$(date +"%m-%d-%Y")_$(date +"%H:%M:%S")
 if [[ "$NEURON_EXTRACT_GRAPHS_ONLY" == "1" ]]; then
-    MAX_STEPS=100
-    LOG_FILE_NAME="compile_log_hf_gpt2_param_"$MODEL_SIZE"_grad_accum"$GRAD_ACCUM_STEP"_bs"$BATCH_SIZE_$(date +"%m-%d-%Y")_$(date +"%H:%M:%S")
+    MAX_STEPS=10
+    LOG_FILE_NAME="compile_log_hf_gpt2_neo_param_"$MODEL_SIZE"_grad_accum"$GRAD_ACCUM_STEP"_bs"$BATCH_SIZE_$(date +"%m-%d-%Y")_$(date +"%H:%M:%S")
 fi
 
 torchrun $DISTRIBUTED_ARGS run_clm_no_trainer.py $ADD_ARGS \
@@ -105,8 +100,8 @@ torchrun $DISTRIBUTED_ARGS run_clm_no_trainer.py $ADD_ARGS \
     --gradient_checkpointing \
     --validation_split_percentage 0 \
     --use_grad_clipping \
-    --output_dir test-2.7B-long\
+    --output_dir gpt_neo_2p7B \
     #--resume_step 50 \
     #--resume_from_checkpoint test-temp-restart-check \
     #--checkpointing_steps 50 \
-    #2>&1 | tee $(hostname)_1.log \
+    2>&1 | tee $LOG_FILE_NAME
