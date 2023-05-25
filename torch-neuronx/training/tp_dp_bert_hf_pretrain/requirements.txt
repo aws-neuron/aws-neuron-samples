@@ -1,0 +1,12 @@
+graphviz
+tensorboard==2.6
+transformers==4.26.0
+evaluate
+pillow
+pytest
+accelerate
+datasets >= 1.8.0
+sentencepiece != 0.1.92
+h5py
+requests
+numpy<=1.20.0
