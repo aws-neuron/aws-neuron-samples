@@ -14,9 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# AdamW adapted from HuggingFace, with high-precision copy of weights for BF16/FP32 training.
+# AdamW adapted from HuggingFace, with high-precision optimizer states for BF16/FP32 training.
 # source: https://github.com/huggingface/transformers/blob/main/src/transformers/optimization.py#L358
 
+import os
 import math
 import warnings
 from functools import partial
@@ -28,10 +29,10 @@ from torch.optim import Optimizer
 from transformers.utils import logging
 from transformers.utils.versions import require_version
 
-class AdamW(Optimizer):
+class AdamW_FP32OptimParams(Optimizer):
     """
     Implements Adam algorithm with weight decay fix as introduced in [Decoupled Weight Decay
-    Regularization](https://arxiv.org/abs/1711.05101).
+    Regularization](https://arxiv.org/abs/1711.05101), designed with high-precision optimizer states.
     Parameters:
         params (`Iterable[nn.parameter.Parameter]`):
             Iterable of parameters to optimize or dictionaries defining parameter groups.
@@ -57,7 +58,7 @@ class AdamW(Optimizer):
         eps: float = 1e-6,
         weight_decay: float = 0.0,
         correct_bias: bool = True,
-        no_deprecation_warning: bool = False,
+        no_deprecation_warning: bool = True,
     ):
         if not no_deprecation_warning:
             warnings.warn(
@@ -76,6 +77,7 @@ class AdamW(Optimizer):
         if not 0.0 <= eps:
             raise ValueError(f"Invalid epsilon value: {eps} - should be >= 0.0")
         defaults = {"lr": lr, "betas": betas, "eps": eps, "weight_decay": weight_decay, "correct_bias": correct_bias}
+        self.upcast_optim_states = os.environ.get('XLA_DOWNCAST_BF16', '0') == '1'
         super().__init__(params, defaults)
 
     def step(self, closure: Callable = None):
@@ -93,7 +95,11 @@ class AdamW(Optimizer):
                 if p.grad is None:
                     continue
                 # Upcast grad to fp64 so that XLA_DOWNCAST_BF16=1 keeps grad operations in fp32
-                grad = p.grad.data.double()
+                if self.upcast_optim_states:
+                    grad = p.grad.data.double()
+                else:
+                    grad = p.grad.data
+
                 if grad.is_sparse:
                     raise RuntimeError("Adam does not support sparse gradients, please consider SparseAdam instead")
 
