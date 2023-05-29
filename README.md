@@ -10,16 +10,29 @@ Samples are organized by use case (training, inference) and deep learning framew
 
 | Framework | Description | Instance Type |
 | --- | --- | --- |
-| [PyTorch Neuron (torch-neuronx)](torch-neuronx/README.md#training) | Sample training scripts for training various PyTorch models on AWS Trainium | Trn1 |
+| [PyTorch Neuron (torch-neuronx)](torch-neuronx/README.md#training) | Sample training scripts for training various PyTorch models on AWS Trainium | Trn1, Trn1n & Inf2 |
+
+| Usage | Description | Instance Type |
+| --- | --- | --- |
+| [Megatron-LM for Neuron](https://github.com/aws-neuron/aws-neuron-reference-for-megatron-lm) | A library that enables large-scale distributed training of language models such as GPT and is adapted from Megatron-LM. | Trn1, Trn1n |
+| [AWS Neuron samples for ParallelCluster](https://github.com/aws-neuron/aws-neuron-parallelcluster-samples) | How to use AWS ParallelCluster to build HPC compute cluster that uses trn1 compute nodes to run your distributed ML training job.  | Trn1, Trn1n |
+| [AWS Neuron samples for EKS](https://github.com/aws-neuron/aws-neuron-eks-samples) | The samples in this repository demonstrate the types of patterns that can be used to deliver inference and distributed training on EKS using Inferentia and Trainium. | Trn1, Trn1n |
+| [AWS Neuron samples for SageMaker](https://github.com/aws-neuron/aws-neuron-sagemaker-samples) | SageMaker Samples using ml.trn1 instances for machine learning (ML) training workloads on the AWS ML accelerator chips Trainium. | Trn1, Trn1n |
+
 
 ## Inference
 
 | Framework | Description | Instance Type |
 | --- | --- | --- |
+| [PyTorch Neuron (torch-neuronx)](torch-neuronx/README.md#inference) | Sample Jupyter notebooks demonstrating model compilation and inference for various PyTorch models on AWS Inferentia2 and Trainium | Inf2 & Trn1 |
+| [PyTorch Neuron (transformers-neuronx)](torch-neuronx/transformers-neuronx) | Sample Jupyter Notebooks demonstrating tensor parallel inference for various PyTorch large language models (LLMs) on AWS Inferentia2 and Trainium | Inf2 & Trn1 |
 | [PyTorch Neuron (torch-neuron)](torch-neuron) | Sample Jupyter notebooks demonstrating model compilation and inference for various PyTorch models on AWS Inferentia | Inf1 |
-| [PyTorch Neuron (torch-neuronx)](torch-neuronx/README.md#inference) | Sample Jupyter notebooks demonstrating model compilation and inference for various PyTorch models on AWS Trainium | Trn1 |
-| [PyTorch Neuron (transformers-neuronx)](torch-neuronx/transformers-neuronx) | Sample Jupyter Notebooks demonstrating tensor parallel inference for various PyTorch large language models (LLMs) on AWS Inferentia and Trainium | Inf2 & Trn1 |
 | [TensorFlow Neuron (tensorflow-neuron)](tensorflow-neuron) | Sample Jupyter notebooks demonstrating model compilation and inference for various TensorFlow models on AWS Inferentia | Inf1 |
+
+| Usage | Description | Instance Type |
+| --- | --- | --- |
+| [AWS Neuron samples for SageMaker](https://github.com/aws-neuron/aws-neuron-sagemaker-samples) | SageMaker Samples using ml.inf2 and ml.trn1 instances for machine learning (ML) inference workloads on the AWS ML accelerator chips Inferentia2 and Trainium.  | Inf2 & Trn1 |
+
 
 ## Getting Help
 
