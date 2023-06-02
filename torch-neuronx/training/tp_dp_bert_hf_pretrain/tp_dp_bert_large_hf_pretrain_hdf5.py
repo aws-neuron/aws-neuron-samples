@@ -361,8 +361,6 @@ def get_model(flags):
         my_config.num_attention_heads = 2
         my_config.hidden_size = 16
     my_model = BertForPreTraining(my_config)
-    def init_weights(weights):
-        torch.nn.init.normal_(weights, mean=0.0, std=my_config.initializer_range)
 
     class ParallelSelfAttention(BertSelfAttention):
         def __init__(self, config, position_embedding_type=None):
@@ -370,13 +368,6 @@ def get_model(flags):
             self.query = layers.ColumnParallelLinear(config.hidden_size, self.all_head_size, gather_output=False)
             self.key = layers.ColumnParallelLinear(config.hidden_size, self.all_head_size, gather_output=False)
             self.value = layers.ColumnParallelLinear(config.hidden_size, self.all_head_size, gather_output=False)
-            init_weights(self.query.weight)
-            init_weights(self.key.weight)
-            init_weights(self.value.weight)
-            with torch.no_grad():
-                self.query.bias.zero_()
-                self.key.bias.zero_()
-                self.value.bias.zero_()
             self.num_attention_heads = self.num_attention_heads // parallel_state.get_tensor_model_parallel_size()
             self.all_head_size = self.all_head_size // parallel_state.get_tensor_model_parallel_size()
 
@@ -386,9 +377,6 @@ def get_model(flags):
             self.dense = layers.RowParallelLinear(config.hidden_size,
                                        config.hidden_size,
                                        input_is_parallel=True)
-            init_weights(self.dense.weight)
-            with torch.no_grad():
-                self.dense.bias.zero_()
     
     for layer in my_model.bert.encoder.layer:
         layer.attention.self = ParallelSelfAttention(my_config)
