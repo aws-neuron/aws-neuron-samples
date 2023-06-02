@@ -363,16 +363,6 @@ def get_model(flags):
     my_model = BertForPreTraining(my_config)
     def init_weights(weights):
         torch.nn.init.normal_(weights, mean=0.0, std=my_config.initializer_range)
-    my_model.bert.embeddings.word_embeddings = layers.ParallelEmbedding(
-        my_config.vocab_size,
-        my_config.hidden_size,
-        init_method=init_weights,
-    )
-
-    my_model.cls.predictions.decoder = layers.ColumnParallelLinear(
-        my_config.hidden_size, my_config.vocab_size, bias=False)
-
-    init_weights(my_model.cls.predictions.decoder.weight)
 
     class ParallelSelfAttention(BertSelfAttention):
         def __init__(self, config, position_embedding_type=None):
@@ -484,7 +474,7 @@ def train_bert_hdf5(flags):
             logger = Logger(flags, world_size, model_dtype)
         metric_writer = TrainingMetrics(flags.metrics_file)
         throughput = Throughput(
-            flags.batch_size, xm.xrt_world_size(), flags.grad_accum_usteps
+            flags.batch_size, world_size, flags.grad_accum_usteps
         )
         print("--------TRAINING CONFIG----------")
         print(flags)
