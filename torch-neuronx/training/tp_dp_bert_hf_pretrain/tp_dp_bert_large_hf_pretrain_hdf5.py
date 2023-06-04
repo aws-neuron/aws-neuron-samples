@@ -368,6 +368,18 @@ def get_model(flags):
             self.query = layers.ColumnParallelLinear(config.hidden_size, self.all_head_size, gather_output=False)
             self.key = layers.ColumnParallelLinear(config.hidden_size, self.all_head_size, gather_output=False)
             self.value = layers.ColumnParallelLinear(config.hidden_size, self.all_head_size, gather_output=False)
+            # BERT initializes the model with normal distribution. Here we scale the std, since the weights are 
+            # sharded
+            self.query.weight.data.normal_(
+                mean=0.0, std=config.initializer_range/math.sqrt(parallel_state.get_tensor_model_parallel_size()))
+            self.key.weight.data.normal_(
+                mean=0.0, std=config.initializer_range/math.sqrt(parallel_state.get_tensor_model_parallel_size()))
+            self.value.weight.data.normal_(
+                mean=0.0, std=config.initializer_range/math.sqrt(parallel_state.get_tensor_model_parallel_size()))
+            with torch.no_grad():
+                self.query.bias.data.zero_()
+                self.key.bias.data.zero_()
+                self.value.bias.data.zero_()
             self.num_attention_heads = self.num_attention_heads // parallel_state.get_tensor_model_parallel_size()
             self.all_head_size = self.all_head_size // parallel_state.get_tensor_model_parallel_size()
 
@@ -377,6 +389,10 @@ def get_model(flags):
             self.dense = layers.RowParallelLinear(config.hidden_size,
                                        config.hidden_size,
                                        input_is_parallel=True)
+            self.dense.weight.data.normal_(
+                mean=0.0, std=config.initializer_range/math.sqrt(parallel_state.get_tensor_model_parallel_size()))
+            with torch.no_grad():
+                self.dense.bias.data.zero_()
     
     for layer in my_model.bert.encoder.layer:
         layer.attention.self = ParallelSelfAttention(my_config)
