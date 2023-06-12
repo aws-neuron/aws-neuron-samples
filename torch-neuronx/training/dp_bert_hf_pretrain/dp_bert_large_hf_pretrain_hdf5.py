@@ -287,11 +287,11 @@ def train_bert_hdf5(flags):
         optimizer = AdamW(optimizer_grouped_parameters, flags.lr)
     elif optimizer_type == 'AdamW_FP32OptimParams':
         try:
-            from adamw_fp32_optim_params import AdamW as AdamW_FP32OptimParams
+            from adamw_fp32_optim_params import AdamW_FP32OptimParams
         except ImportError as ex:
             print(f'{optimizer_type} selected but no AdamW with FP32 optimizer parameters implementation is available. Please make sure adamw_fp32_optim_params.py exists in the same dir.')
             raise ex
-        print('Using AdamW with FP32 copy of weights')
+        print('Using AdamW with FP32 optimizer states')
         optimizer = AdamW_FP32OptimParams(optimizer_grouped_parameters, flags.lr)
     elif optimizer_type == 'LAMB':
         try:
@@ -570,7 +570,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_dir', type=str, default='~/examples_datasets/bert_pretrain_wikicorpus_tokenized_hdf5_seqlen128/', help="Pre-tokenized HDF5 dataset directory.")
     parser.add_argument('--output_dir', type=str, default='./output', help="Directory for checkpoints and logs.")
     parser.add_argument('--metrics_file', type=str, default='results.json', help="training metrics results file")
-    parser.add_argument('--optimizer', type=str, default='AdamW', choices=['AdamW', 'AdamW_FP32OptimParams', 'LAMB'], help="choose optimizer type: (default) AdamW, AdamW_FP32OptimParams (optimizer params in high precision), LAMB")
+    parser.add_argument('--optimizer', type=str, default='AdamW_FP32OptimParams', choices=['AdamW', 'AdamW_FP32OptimParams', 'LAMB'], help="choose optimizer type: AdamW_FP32OptimParams (default, optimizer params in high precision), AdamW, LAMB")
     parser.add_argument('--batch_size', type=int, default=8, help="Worker batch size.")
     parser.add_argument('--max_steps', type=int, default=28125, help="Maximum total accumulation-steps to run.")
     parser.add_argument('--steps_this_run', type=int, default=-1, help="Exit early at <value> steps and not go to max_steps. -1 to mean no early exit.")
