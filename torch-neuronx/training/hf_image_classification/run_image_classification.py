@@ -19,8 +19,14 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
-import numpy as np
+# Enable torchrun
 import torch
+from torch.distributed.elastic.multiprocessing.errors import record
+import torch_xla.distributed.xla_backend
+if os.environ.get("WORLD_SIZE"):
+    torch.distributed.init_process_group('xla')
+
+import numpy as np
 from datasets import load_dataset
 from PIL import Image
 from torchvision.transforms import (
@@ -49,6 +55,10 @@ from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
+# Workaround for NaNs seen with transformers version >= 4.21.0
+# https://github.com/aws-neuron/aws-neuron-sdk/issues/593
+if os.environ.get("XLA_USE_BF16") or os.environ.get("XLA_DOWNCAST_BF16"):
+    transformers.modeling_utils.get_parameter_dtype = lambda x: torch.bfloat16
 
 """ Fine-tuning a 🤗 Transformers model for image classification"""
 
