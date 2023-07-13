@@ -85,7 +85,7 @@ for i in range(REPEATED_RUNS):
 
 ## Counting time
 
-Make sure to use a sufficiently-granular counter. We recommend using [`time.perf_counter`](https://docs.python.org/3/library/time.html#time.perf_counter)`, `which uses the clock with the highest available resolution. The Neuron microbenchmark samples, contain a simple [utility](ubench_utils.py) that is adequate for perf timing. Using the timer class, we can decorate the previous code to measure runtime of each section. 
+Make sure to use a sufficiently-granular counter. We recommend using [`time.perf_counter`](https://docs.python.org/3/library/time.html#time.perf_counter), which uses the clock with the highest available resolution. The Neuron microbenchmark samples, contain a simple [utility](ubench_utils.py) that is adequate for perf timing. Using the timer class, we can decorate the previous code to measure runtime of each section. 
 
 
 ```

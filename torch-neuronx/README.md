@@ -50,7 +50,6 @@ The following samples are available for LLM tensor parallel inference:
 
 The following samples are available for microbenchmarking:
 
-| Name                                                        | Description                                                                                                                             | Training Parallelism |
+| Name                                                        | Description                                                                                                                             
 |-------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------- |
-| [matmult](microbenchmark/matmult_linear.py)         | Matrix multiplication microbenchmark
-|
+| [matmult](microbenchmark/matmult_linear.py)         | Matrix multiplication microbenchmark    
