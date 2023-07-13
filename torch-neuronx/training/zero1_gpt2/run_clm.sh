@@ -48,7 +48,7 @@ else
     export NEURON_CC_FLAGS="--retry_failed_compilation --distribution-strategy FSDP --model-type transformer"
 fi
 
-NEURON_CC_FLAGS+=" --cache_dir=$HOME/neuron_cache/gpt_1p5B_neo/`hostname`"
+NEURON_CC_FLAGS+=" --cache_dir=$HOME/neuron_cache/gpt_1p5B/`hostname`"
 
 export DISABLE_NUMERIC_CC_TOKEN=1
 export NEURON_RT_HIERARCHICAL_CC=1
