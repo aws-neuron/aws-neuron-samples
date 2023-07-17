@@ -52,4 +52,5 @@ The following samples are available for microbenchmarking:
 
 | Name                                                        | Description                                                                                                                             
 |-------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------- |
-| [matmult](microbenchmark/matmult_linear.py)         | Matrix multiplication microbenchmark    
+| [tutorial](microbenchmark/microbenchmark.ipynb)         | Microbenchmarking tutorial
+| [matmult](microbenchmark/matmult_linear.py)         | Matrix multiplication microbenchmark 
