@@ -383,17 +383,23 @@ def main():
         )
 
     if args.model_name_or_path:
-        model = load_model(
-        model_type=args.model_name_or_path,
-        config_path=args.config_name,
-        model_config={
+        model_config = {
             "vocab_size": 50304 if args.use_zero1 else len(tokenizer),  # zero1 not support padding
             "max_length": args.block_size,
             #"fused_scaled_masked_softmax": True, #args.fused_scaled_masked_softmax,
             #"fused_gelu": args.fused_gelu,
             "gradient_checkpointing": args.gradient_checkpointing,
             "use_cache": not args.gradient_checkpointing,
-            },
+        }
+        if args.use_zero1:
+            model_config.update({
+                "n_embd": 1536,  # zero1 not support padding
+                "n_head": 24,  # zero1 not support padding
+            })
+        model = load_model(
+            model_type=args.model_name_or_path,
+            config_path=args.config_name,
+            model_config=model_config,
         )
         # remove model = model.to('xla') before FSDP wrapper, so that the sharding will happen in CPU and only the sharded tensor will be sent to device
         # model = model.to('xla')
