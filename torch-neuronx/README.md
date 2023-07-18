@@ -45,3 +45,12 @@ The following samples are available for LLM tensor parallel inference:
 | [facebook/opt-13b](transformers-neuronx/inference/facebook-opt-13b-sampling.ipynb) | Inf2 & Trn1 |
 | [facebook/opt-30b](transformers-neuronx/inference/facebook-opt-30b-sampling.ipynb) | Inf2 & Trn1 |
 | [facebook/opt-66b](transformers-neuronx/inference/facebook-opt-66b-sampling.ipynb) | Inf2 |
+
+## Microbenchmarking
+
+The following samples are available for microbenchmarking:
+
+| Name                                                        | Description                                                                                                                             
+|-------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------- |
+| [tutorial](microbenchmark/microbenchmark.ipynb)         | Microbenchmarking tutorial
+| [matmult](microbenchmark/matmult_linear.py)         | Matrix multiplication microbenchmark 
