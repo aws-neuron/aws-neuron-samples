@@ -28,6 +28,7 @@ if [ ! -z "$SLURM_NTASKS" ]; then
     export FI_EFA_USE_DEVICE_RDMA=1
     export FI_PROVIDER=efa
     echo "WORLD_SIZE_JOB=$WORLD_SIZE_JOB,  RANK_NODE=$RANK_NODE,  MASTER_ADDR_JOB=$MASTER_ADDR_JOB, NODE_LIST=$NODE_LIST"
+    export TRANSFORMERS_CACHE=$HOME/hf_cache/`hostname`/hub
 fi
 
 #Print Slurm Config
