@@ -59,6 +59,7 @@ class AdamW_FP32OptimParams(Optimizer):
         weight_decay: float = 0.0,
         correct_bias: bool = True,
         no_deprecation_warning: bool = True,
+        differentiable: bool = False,
     ):
         if not no_deprecation_warning:
             warnings.warn(

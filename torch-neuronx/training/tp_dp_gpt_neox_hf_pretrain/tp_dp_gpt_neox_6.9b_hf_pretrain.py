@@ -35,7 +35,6 @@ import torch_xla.distributed.xla_multiprocessing as xmp
 import torch_xla.distributed.xla_backend
 import numpy as np
 from transformers import (
-    AdamW,
     AutoConfig,
     AutoModelForCausalLM,
     default_data_collator,
@@ -44,12 +43,12 @@ from transformers import (
 )
 from transformers.optimization import get_linear_schedule_with_warmup
 
-import copy
 from torch.utils.tensorboard import SummaryWriter
 import inspect
 import requests
 from neuronx_distributed.parallel_layers import parallel_state, checkpointing, move_model_to_device
 import datasets
+import math
 
 from transformers.models.gpt_neox import modeling_gpt_neox
 from neuronx_distributed.parallel_layers.layers import ParallelEmbedding, ColumnParallelLinear, RowParallelLinear
@@ -256,7 +255,7 @@ def get_model():
     class GPTNeoXAttention(modeling_gpt_neox.GPTNeoXAttention):
         def __init__(self, config):
             super().__init__(config)
-            self.num_attention_heads = neuronx_dist_utils.divide(config.num_attention_heads, get_tensor_model_parallel_size()) 
+            self.num_attention_heads = neuronx_dist_utils.divide(config.num_attention_heads, get_tensor_model_parallel_size())
             self.query_key_value = ColumnParallelLinear(
                 config.hidden_size,
                 3 * config.hidden_size,
@@ -273,8 +272,6 @@ def get_model():
             with torch.no_grad():
                 self.query_key_value.bias.data.zero_()
                 self.dense.bias.data.zero_()
-            move_model_to_device(self, xm.xla_device())
-    modeling_gpt_neox.GPTNeoXAttention = GPTNeoXAttention
 
     class GPTNeoXMLP(modeling_gpt_neox.GPTNeoXMLP):
         def __init__(self, config):
@@ -294,18 +291,22 @@ def get_model():
             with torch.no_grad():
                 self.dense_h_to_4h.bias.data.zero_()
                 self.dense_4h_to_h.bias.data.zero_()
-            move_model_to_device(self, xm.xla_device())
-    modeling_gpt_neox.GPTNeoXMLP = GPTNeoXMLP
 
-    class GPTNeoXModel(modeling_gpt_neox.GPTNeoXModel):
-        def __init__(self, config):
-            super().__init__(config)
-            self.embed_in = ParallelEmbedding(
-                config.vocab_size,
-                config.hidden_size,
+    def get_sharded_data(data, dim):
+        tp_rank = parallel_state.get_tensor_model_parallel_rank()
+        per_partition_size = data.shape[dim] // parallel_state.get_tensor_model_parallel_size()
+        if dim == 0:
+            return data[
+                per_partition_size * tp_rank : per_partition_size * (tp_rank + 1)
+            ].clone()
+        elif dim == 1:
+            return data[
+                :, per_partition_size * tp_rank : per_partition_size * (tp_rank + 1)
+            ].clone()
+        else:
+            raise Exception(
+                f"Partiton value of 0,1 are supported, found {dim}."
             )
-            self.embed_in.weight.data.normal_(mean=0.0, std=config.initializer_range)
-    modeling_gpt_neox.GPTNeoXModel = GPTNeoXModel
 
     model_name = "EleutherAI/pythia-6.9b"
     config = AutoConfig.from_pretrained(model_name)
@@ -314,6 +315,35 @@ def get_model():
     model = AutoModelForCausalLM.from_config(config)
     model.gradient_checkpointing_enable()
 
+    for layer in model.gpt_neox.layers:
+        orig_attn = layer.attention
+        layer.attention = GPTNeoXAttention(config)
+        layer.attention.query_key_value.weight.data = get_sharded_data(orig_attn.query_key_value.weight.data, 0)
+        layer.attention.dense.weight.data = get_sharded_data(orig_attn.dense.weight.data, 1)
+        del orig_attn
+
+        orig_mlp = layer.mlp
+        layer.mlp = GPTNeoXMLP(config)
+        layer.mlp.dense_h_to_4h.weight.data = get_sharded_data(orig_mlp.dense_h_to_4h.weight.data, 0)
+        layer.mlp.dense_4h_to_h.weight.data = get_sharded_data(orig_mlp.dense_4h_to_h.weight.data, 1)
+        del orig_mlp
+
+    orig_embed_in = model.gpt_neox.embed_in
+    model.gpt_neox.embed_in = ParallelEmbedding(config.vocab_size, config.hidden_size,)
+    model.gpt_neox.embed_in.weight.data = get_sharded_data(orig_embed_in.weight.data, 0)
+    del orig_embed_in
+
+    xm.master_print(model)
+    return model
+
+def get_and_move_model_sequential(device, num_workers_per_step=11):
+    local_rank = xm.get_local_ordinal()
+    local_world_size = neuronx_dist_utils.get_local_world_size()
+    for worker in range(math.ceil(local_world_size / num_workers_per_step)):
+        if local_rank // num_workers_per_step == worker:
+            model = get_model()
+            move_model_to_device(model, device)
+        neuronx_dist_utils.add_barrier("get_and_move_model_sequential" + str(worker))
     return model
 
 def get_dtype(model) -> str:
@@ -327,7 +357,7 @@ def get_dtype(model) -> str:
             return "torch.bfloat16"
         if "torch.double" in str(model.dtype):
             return "torch.float32"
-    return str(model.dtype)    
+    return str(model.dtype)
 
 def train_gpt_neox(flags):
     parallel_state.initialize_model_parallel(tensor_model_parallel_size=flags.tensor_parallel_size)
@@ -338,8 +368,7 @@ def train_gpt_neox(flags):
     worker_init = WorkerInitObj(flags.seed)
     device = xm.xla_device()
 
-    model = get_model()
-    move_model_to_device(model, device)
+    model = get_and_move_model_sequential(device)
     model.train()
 
     model_dtype = get_dtype(model)
@@ -487,10 +516,10 @@ def train_gpt_neox(flags):
 
     if flags.resume_ckpt:
         state_dict = checkpointing.load(flags.output_dir, model)
-        optimizer.load_state_dict(state_dict["optimizer"])
         global_step = state_dict["global_step"]
         epoch = state_dict["epoch"]
         scheduler_state_dict = state_dict["scheduler"]
+        optimizer.load_sharded_state_dict(flags.output_dir)
     else:
         global_step = 0
         epoch = 0
@@ -595,15 +624,14 @@ def train_gpt_neox(flags):
                     ),
                 ]
                 metric_writer.store_metrics(metric_data)
-            # TODO: zero-1 state_dict
             state_dict = {
                 "model": model.state_dict(),
                 "global_step": global_step,
                 "epoch": epoch,
-                "optimizer": optimizer.state_dict(),
                 "scheduler": scheduler.state_dict()
             }
             checkpointing.save(state_dict, flags.output_dir, down_cast_bf16=True)
+            optimizer.save_sharded_state_dict(flags.output_dir)
             return
 
         epoch += 1
