@@ -3,7 +3,7 @@
 #############################################
 # User defined parameters and env vars
 
-export NEURON_CC_FLAGS="--model-type=transformer --enable-experimental-O1 --enable-internal-call-graph --enable-saturate-infinity"
+export NEURON_CC_FLAGS="--model-type=transformer --enable-experimental-O1 --enable-saturate-infinity"
 export NEURON_FUSE_SOFTMAX=1
 
 export XLA_DOWNCAST_BF16=1
@@ -28,35 +28,31 @@ DATA_PATH="~/examples_datasets/wikicorpus_gpt_neox_tokenized_2k"
 
 #############################################
 
-WORLD_SIZE=$SLURM_NTASKS
-NODE_ID=$SLURM_NODEID
-IFS= read -r -a NODE_LIST <<< $(scontrol show hostnames "$SLURM_JOB_NODELIST")
-MASTER_ADDRESS=$(echo $NODE_LIST | sed 's/ .*//g') # first one
-
-if [ $NODE_ID -eq 0 ]; then
-    echo "NODE_LIST = $NODE_LIST"
-    echo "WORLD_SIZE=$WORLD_SIZE"
-    echo "NODE_ID=$NODE_ID"
-    echo "MASTER_ADDRESS=$MASTER_ADDRESS"
+export NEURON_NUM_DEVICES=32
+NODE_ID=0
+WORLD_SIZE=1
+DISTRIBUTED_ARGS="--nproc_per_node $NEURON_NUM_DEVICES"
+if [ ! -z "$SLURM_NTASKS" ]; then
+    WORLD_SIZE=$SLURM_NTASKS
+    NODE_ID=$SLURM_NODEID
+    MASTER_ADDRESS=(`scontrol show hostnames $SLURM_JOB_NODELIST`)
+    DISTRIBUTED_ARGS="--nproc_per_node $NEURON_NUM_DEVICES --nnodes $WORLD_SIZE --node_rank $NODE_ID --master_addr $MASTER_ADDRESS --master_port 44000"
+    if [ $NODE_ID -eq 0 ]; then
+        echo "WORLD_SIZE=$WORLD_SIZE"
+        echo "NODE_ID=$NODE_ID"
+        echo "MASTER_ADDRESS=$MASTER_ADDRESS"
+        echo "DISTRIBUTED_ARGS=$DISTRIBUTED_ARGS"
+    fi
+    export FI_EFA_USE_DEVICE_RDMA=1
+    export FI_PROVIDER=efa
 fi
-
-export FI_EFA_USE_DEVICE_RDMA=1
-export FI_PROVIDER=efa
-
-sudo sysctl -w net.ipv4.ip_local_reserved_ports=44000,48620
-
-export NEURON_RT_NUM_CORES=32
-export NEURON_NUM_DEVICES=$NEURON_RT_NUM_CORES
-export TPU_NUM_DEVICES=$NEURON_RT_NUM_CORES
-export TPU_CHIPS_PER_HOST_BOUNDS=$NEURON_RT_NUM_CORES
-export NEURON_RT_ROOT_COMM_ID=localhost:48620
 
 #############################################
 
-DP=$(($NEURON_RT_NUM_CORES * $WORLD_SIZE / $TP_DEGREE))
+DP=$(($NEURON_NUM_DEVICES * $WORLD_SIZE / $TP_DEGREE))
 ACC_STEPS=$(($GBS / $MBS / $DP))
 
-if [ $NEURON_EXTRACT_GRAPHS_ONLY -gt 0 ]; then
+if [ ! -z "$NEURON_EXTRACT_GRAPHS_ONLY" ]; then
     STEPS_THIS_RUN=6
     OUTPUT_LOG=log_compile-$NODE_ID.log
 else
@@ -79,7 +75,7 @@ if [ $NODE_ID -eq 0 ]; then
     echo OUTPUT_LOG=$OUTPUT_LOG
 fi
 
-torchrun --nproc_per_node=$NEURON_RT_NUM_CORES --nnodes=$WORLD_SIZE --node_rank=$NODE_ID --master_addr=$MASTER_ADDRESS --master_port=44000 \
+torchrun $DISTRIBUTED_ARGS \
     tp_dp_gpt_neox_6.9b_hf_pretrain.py \
     --data_dir $DATA_PATH \
     --tensor_parallel_size $TP_DEGREE \
