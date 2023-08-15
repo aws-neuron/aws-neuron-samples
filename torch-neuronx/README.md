@@ -17,7 +17,7 @@ The following samples are available for training:
 | [hf_image_classification](training/hf_image_classification) | Fine-tuning Hugging Face models (ex. ViT) for a image classification task                                                               | DataParallel |
 | [hf_contrastive_image_text](training/hf_contrastive_image_text) | Fine-tuning Multi-modal Image and Text Hugging Face models (ex. CLIP)                                                                 | DataParallel |
 | [hf_language_modeling](training/hf_language_modeling)       | Training Hugging Face models (ex. GPT2) for causal language modeling (CLM)                                                              | DataParallel |
-| [hf_bert_jp](training/hf_bert_jp_text_classification)       | Fine-tuning Hugging Face BERT Japanese model                                                                                            | DataParallel |
+| [hf_bert_jp](training/hf_bert_jp)                           | Fine-tuning & Deployment Hugging Face BERT Japanese model                                                                               | DataParallel |
 | [hf_sentiment_analysis](training/hf_sentiment_analysis)     | Examples of training Hugging Face bert-base-cased model for a text classification task with Trn1 Single Neuron and Distributed Training | DataParallel |
 | [customop_mlp](training/customop_mlp)     | Examples of training a multilayer perceptron model with a custom Relu operator on a single Trn1 | DataParallel |
 
