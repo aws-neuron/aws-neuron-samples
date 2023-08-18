@@ -1,18 +1,4 @@
-# coding=utf-8
-# Copyright 2022 EleutherAI The HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-""" PyTorch GPTNeoX model."""
+""" NxD GPTNeoX model """
 
 from typing import Optional, Tuple, Union
 
@@ -21,16 +7,8 @@ import torch.utils.checkpoint
 from torch import nn
 
 from transformers.activations import ACT2FN
-from transformers.file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
 from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
-from transformers.models.gpt_neox.configuration_gpt_neox import GPTNeoXConfig
 
 from neuronx_distributed.parallel_layers.layers import ParallelEmbedding, ColumnParallelLinear, RowParallelLinear
 from neuronx_distributed.parallel_layers.loss_functions import parallel_cross_entropy
@@ -39,55 +17,27 @@ import neuronx_distributed.parallel_layers.utils as neuronx_dist_utils
 from neuronx_distributed.parallel_layers import move_model_to_device, mappings, layer_norm
 import torch_xla.core.xla_model as xm
 
+from transformers.models.gpt_neox.modeling_gpt_neox import (
+    GPTNeoXAttention,
+    GPTNeoXMLP,
+    GPTNeoXLayer,
+    GPTNeoXModel,
+    GPTNeoXPreTrainedModel,
+    GPTNeoXForCausalLM,
+    RotaryEmbedding,
+    apply_rotary_pos_emb,
+)
+
 from functools import partial
 def _init_normal(std, w):
     return nn.init.normal_(w, mean=0.0, std=std)
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "trl-internal-testing/tiny-random-GPTNeoXForCausalLM"
-_REAL_CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neox-20b"
-_CONFIG_FOR_DOC = "GPTNeoXConfig"
 
-GPT_NEOX_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "EleutherAI/gpt-neox-20b",
-    # See all GPTNeoX models at https://huggingface.co/models?filter=gpt_neox
-]
-
-
-class GPTNeoXPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = GPTNeoXConfig
-    base_model_prefix = "gpt_neox"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["GPTNeoXLayer"]
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, GPTNeoXModel):
-            module.gradient_checkpointing = value
-
-
-class GPTNeoXAttention(nn.Module):
+class GPTNeoXAttentionNxD(GPTNeoXAttention):
     def __init__(self, config):
-        super().__init__()
+        nn.Module.__init__(self)
         self.num_attention_heads = config.num_attention_heads
         self.hidden_size = config.hidden_size
         self.head_size = self.hidden_size // self.num_attention_heads
@@ -105,7 +55,7 @@ class GPTNeoXAttention(nn.Module):
         )
         self.norm_factor = torch.sqrt(torch.tensor(self.head_size, dtype=torch.float32)).to(torch.get_default_dtype())
 
-        # Replace the Linear with ColumnParallelLinear and RowParallelLinear
+        # NxD code change: Replace the Linear with ColumnParallelLinear and RowParallelLinear
         self.config = config
         self.num_attention_heads = neuronx_dist_utils.divide(config.num_attention_heads, get_tensor_model_parallel_size()) 
         init_method = partial(_init_normal, config.initializer_range)
@@ -150,7 +100,7 @@ class GPTNeoXAttention(nn.Module):
         new_qkv_shape = qkv.size()[:-1] + (self.num_attention_heads, 3 * self.head_size)
         qkv = qkv.view(*new_qkv_shape)
 
-        # sequence parallel uses seq_len as the 0-th dim
+        # NxD code change: sequence parallel uses seq_len as the 0-th dim
         if self.config.sequence_parallel_enabled:
             # [seq_len, batch, num_attention_heads, 3 * head_size] --> 3 [batch, num_attention_heads, seq_len, head_size]
             query = qkv[..., : self.head_size].permute(1, 2, 0, 3)
@@ -191,7 +141,7 @@ class GPTNeoXAttention(nn.Module):
         attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
 
         # Reshape outputs
-        # sequence parallel uses seq_len as the 0-th dim
+        # NxD code change: sequence parallel uses seq_len as the 0-th dim
         if self.config.sequence_parallel_enabled:
             # tensor [bs, num_attention_heads, seq_len, attn_head_size]
             attn_output = attn_output.permute(2, 0, 1, 3).contiguous()
@@ -211,31 +161,6 @@ class GPTNeoXAttention(nn.Module):
             outputs += (attn_weights,)
 
         return outputs
-
-    @classmethod
-    def _split_heads(cls, tensor, num_attention_heads, attn_head_size):
-        """
-        Splits hidden dim into attn_head_size and num_attention_heads
-        """
-        # tensor: [bs, seq_len, hidden_size]
-        new_shape = tensor.size()[:-1] + (num_attention_heads, attn_head_size)
-        # -> [bs, seq_len, num_attention_heads, attn_head_size]
-        tensor = tensor.view(new_shape)
-        # -> [bs, num_attention_heads, seq_len, attn_head_size]
-        tensor = tensor.permute(0, 2, 1, 3)
-        return tensor
-
-    @classmethod
-    def _merge_heads(cls, tensor, num_attention_heads, attn_head_size):
-        """
-        Merges attn_head_size dim and num_attn_heads dim into hidden dim
-        """
-        # tensor [bs, num_attention_heads, seq_len, attn_head_size]
-        tensor = tensor.permute(0, 2, 1, 3).contiguous()
-        # -> [bs, seq_len, num_attention_heads, attn_head_size]
-        tensor = tensor.view(tensor.size(0), tensor.size(1), num_attention_heads * attn_head_size)
-        # -> [bs, seq_len, hidden_size]
-        return tensor
 
     def _attn(self, query, key, value, attention_mask=None, head_mask=None):
         # q, k, v: [bs, num_attention_heads, seq_len, attn_head_size]
@@ -261,7 +186,7 @@ class GPTNeoXAttention(nn.Module):
         )
         attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
 
-        # creating causal_mask on-the-fly to trigger the Neuron compiler optimization
+        # NxD code change: creating causal_mask on-the-fly to trigger the Neuron compiler optimization
         causal_mask = torch.triu(torch.ones((1, 1, query_length, key_length), device='xla'), diagonal=1).bool()
         attn_scores = attn_scores.masked_fill_(causal_mask, -10000.0)
 
@@ -276,61 +201,12 @@ class GPTNeoXAttention(nn.Module):
         return attn_output, attn_weights
 
 
-def attention_mask_func(attention_scores, ltor_mask):
-    attention_scores.masked_fill_(~ltor_mask, torch.finfo(attention_scores.dtype).min)
-    return attention_scores
-
-
-class RotaryEmbedding(torch.nn.Module):
-    def __init__(self, dim, max_position_embeddings, base=10000, device=None):
-        super().__init__()
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float().to(device) / dim))
-        self.register_buffer("inv_freq", inv_freq)
-
-        # Build here to make `torch.jit.trace` work.
-        self.max_seq_len_cached = max_position_embeddings
-        t = torch.arange(self.max_seq_len_cached, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-        # Different from paper, but it uses a different permutation in order to obtain the same calculation
-        emb = torch.cat((freqs, freqs), dim=-1)
-        self.cos_cached = emb.cos()[None, None, :, :]
-        self.sin_cached = emb.sin()[None, None, :, :]
-
-    def forward(self, x, seq_len=None):
-        # x: [bs, num_attention_heads, seq_len, head_size]
-        # This `if` block is unlikely to be run after we build sin/cos in `__init__`. Keep the logic here just in case.
-        if seq_len > self.max_seq_len_cached:
-            self.max_seq_len_cached = seq_len
-            t = torch.arange(self.max_seq_len_cached, device=x.device, dtype=self.inv_freq.dtype)
-            freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-            # Different from paper, but it uses a different permutation in order to obtain the same calculation
-            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
-            self.cos_cached = emb.cos()[None, None, :, :]
-            self.sin_cached = emb.sin()[None, None, :, :]
-        return self.cos_cached[:seq_len, ...].to(x.device), self.sin_cached[:seq_len, ...].to(x.device)
-
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
-    cos = cos[..., offset : q.shape[-2] + offset, :]
-    sin = sin[..., offset : q.shape[-2] + offset, :]
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
-class GPTNeoXMLP(nn.Module):
+class GPTNeoXMLPNxD(GPTNeoXMLP):
     def __init__(self, config):
-        super().__init__()
+        nn.Module.__init__(self)
         self.act = ACT2FN[config.hidden_act]
 
-        # Replace the Linear with ColumnParallelLinear and RowParallelLinear
+        # NxD code change: Replace the Linear with ColumnParallelLinear and RowParallelLinear
         self.config = config
         init_method = partial(_init_normal, config.initializer_range)
         self.dense_h_to_4h = ColumnParallelLinear(
@@ -352,19 +228,13 @@ class GPTNeoXMLP(nn.Module):
             self.dense_4h_to_h.bias.data.zero_()
         move_model_to_device(self, xm.xla_device())
 
-    def forward(self, hidden_states):
-        hidden_states = self.dense_h_to_4h(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.dense_4h_to_h(hidden_states)
-        return hidden_states
 
-
-class GPTNeoXLayer(nn.Module):
+class GPTNeoXLayerNxD(GPTNeoXLayer):
     def __init__(self, config):
-        super().__init__()
+        nn.Module.__init__(self)
         self.use_parallel_residual = config.use_parallel_residual
 
-        # Replace the nn LayerNorm with nxd LayerNorm to use sequence parallel
+        # NxD code change: Replace the nn LayerNorm with nxd LayerNorm to use sequence parallel
         self.input_layernorm = layer_norm.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, sequence_parallel_enabled=config.sequence_parallel_enabled)
         self.input_layernorm.bias.data.zero_()
         self.input_layernorm.weight.data.fill_(1.0)
@@ -372,122 +242,16 @@ class GPTNeoXLayer(nn.Module):
         self.post_attention_layernorm.bias.data.zero_()
         self.post_attention_layernorm.weight.data.fill_(1.0)
 
-        self.attention = GPTNeoXAttention(config)
-        self.mlp = GPTNeoXMLP(config)
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        use_cache=False,
-        layer_past=None,
-        output_attentions=False,
-    ):
-
-        attention_layer_outputs = self.attention(
-            self.input_layernorm(hidden_states),
-            attention_mask=attention_mask,
-            layer_past=layer_past,
-            head_mask=head_mask,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-        )
-        attn_output = attention_layer_outputs[0]  # output_attn: attn_output, present, (attn_weights)
-        outputs = attention_layer_outputs[1:]
-
-        if self.use_parallel_residual:
-            # pseudocode:
-            # x = x + attn(ln1(x)) + mlp(ln2(x))
-            mlp_output = self.mlp(self.post_attention_layernorm(hidden_states))
-            hidden_states = mlp_output + attn_output + hidden_states
-        else:
-            # pseudocode:
-            # x = x + attn(ln1(x))
-            # x = x + mlp(ln2(x))
-            attn_output = attn_output + hidden_states
-            mlp_output = self.mlp(self.post_attention_layernorm(attn_output))
-            hidden_states = mlp_output + attn_output
-
-        if use_cache:
-            outputs = (hidden_states,) + outputs  # hidden_states, present, (attn_weights)
-        else:
-            outputs = (hidden_states,) + outputs[1:]  # hidden_states, (attn_weights)
-
-        return outputs
+        self.attention = GPTNeoXAttentionNxD(config)
+        self.mlp = GPTNeoXMLPNxD(config)
 
 
-GPT_NEOX_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`~GPTNeoXConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-GPT_NEOX_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare GPTNeoX Model transformer outputting raw hidden-states without any specific head on top.",
-    GPT_NEOX_START_DOCSTRING,
-)
-class GPTNeoXModel(GPTNeoXPreTrainedModel):
+class GPTNeoXModelNxD(GPTNeoXModel):
     def __init__(self, config):
-        super().__init__(config)
+        GPTNeoXPreTrainedModel.__init__(self, config)
         self.config = config
 
-        # Replace the Embedding with ParallelEmbedding
+        # NxD code change: Replace the Embedding with ParallelEmbedding
         init_method = partial(_init_normal, config.initializer_range)
         self.embed_in = ParallelEmbedding(
                 config.vocab_size,
@@ -495,7 +259,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
                 init_method=init_method,
         )
 
-        self.layers = nn.ModuleList([GPTNeoXLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([GPTNeoXLayerNxD(config) for _ in range(config.num_hidden_layers)])
 
         # Replace the nn LayerNorm with nxd LayerNorm to use sequence parallel
         self.final_layer_norm = layer_norm.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, sequence_parallel_enabled=config.sequence_parallel_enabled)
@@ -507,19 +271,6 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_in
-
-    def set_input_embeddings(self, value):
-        self.embed_in = value
-
-    @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPast,
-        config_class=_CONFIG_FOR_DOC,
-    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -594,7 +345,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
 
         hidden_states = inputs_embeds
 
-        # sequence parallel uses seq_len as the 0-th dim
+        # NxD code change: sequence parallel uses seq_len as the 0-th dim
         if self.config.sequence_parallel_enabled:
             hidden_states = hidden_states.transpose(0, 1).contiguous()
             hidden_states = mappings.scatter_to_sequence_parallel_region(hidden_states)
@@ -644,7 +395,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
 
         hidden_states = self.final_layer_norm(hidden_states)
 
-        # sequence parallel uses seq_len as the 0-th dim
+        # NxD code change: sequence parallel uses seq_len as the 0-th dim
         if self.config.sequence_parallel_enabled:
             hidden_states = mappings.gather_from_sequence_parallel_region(hidden_states, to_model_parallel=False)
             hidden_states = hidden_states.transpose(0, 1).contiguous()
@@ -664,19 +415,14 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """GPTNeoX Model with a `language modeling` head on top for CLM fine-tuning.""", GPT_NEOX_START_DOCSTRING
-)
-class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
-
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
+class GPTNeoXForCausalLMNxD(GPTNeoXForCausalLM):
 
     def __init__(self, config):
-        super().__init__(config)
+        GPTNeoXPreTrainedModel.__init__(self, config)
 
-        self.gpt_neox = GPTNeoXModel(config)
+        self.gpt_neox = GPTNeoXModelNxD(config)
 
-        # Replace the Linear with ColumnParallelLinear
+        # NxD code change: Replace the Linear with ColumnParallelLinear
         init_method = partial(_init_normal, config.initializer_range)
         self.embed_out = ColumnParallelLinear(
             config.hidden_size,
@@ -689,14 +435,6 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_output_embeddings(self):
-        return self.embed_out
-
-    def set_output_embeddings(self, new_embeddings):
-        self.embed_out = new_embeddings
-
-    @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -772,12 +510,12 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
             shift_logits = lm_logits[:, :-1, :].contiguous()
             labels = labels[:, 1:].contiguous()
 
-            # Replace the CrossEntropyLoss with parallel_cross_entropy
+            # NxD code change: Replace the CrossEntropyLoss with parallel_cross_entropy
             loss_fct = parallel_cross_entropy
 
             lm_loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), labels.view(-1))
 
-            # parallel_cross_entropy requires to take an averge
+            # NxD code change: parallel_cross_entropy requires to take an averge
             lm_loss = torch.mean(lm_loss)
 
         if not return_dict:
@@ -791,28 +529,3 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs):
-        input_shape = input_ids.shape
-
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_shape)
-
-        # cut decoder_input_ids if past is used
-        if past_key_values and past_key_values[0] is not None:
-            input_ids = input_ids[:, -1:]
-
-        return {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-        }
-
-    def _reorder_cache(self, past, beam_idx):
-        reordered_past = ()
-        for layer_past in past:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
-            )
-        return reordered_past

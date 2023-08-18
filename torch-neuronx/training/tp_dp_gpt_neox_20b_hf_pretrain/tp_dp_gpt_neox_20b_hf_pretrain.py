@@ -48,10 +48,7 @@ import requests
 from neuronx_distributed.parallel_layers import parallel_state, checkpointing, move_model_to_device
 import datasets
 
-from modeling_gpt_neox_nxd import GPTNeoXForCausalLM
-from neuronx_distributed.parallel_layers.layers import ParallelEmbedding, ColumnParallelLinear, RowParallelLinear
-from neuronx_distributed.parallel_layers.parallel_state import get_tensor_model_parallel_size
-import neuronx_distributed.parallel_layers.utils as neuronx_dist_utils
+from modeling_gpt_neox_nxd import GPTNeoXForCausalLMNxD
 from neuronx_distributed.optimizer import NeuronZero1Optimizer
 from adamw_fp32_optim_params import AdamW_FP32OptimParams
 
@@ -255,7 +252,7 @@ def get_model():
     config.use_cache = False
     config.sequence_parallel_enabled = True
     xm.master_print(config)
-    model = GPTNeoXForCausalLM(config)
+    model = GPTNeoXForCausalLMNxD(config)
     xm.master_print(model)
     model.gradient_checkpointing_enable()
     return model
