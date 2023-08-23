@@ -13,8 +13,7 @@ Samples are organized by use case (training, inference) and deep learning framew
 | [PyTorch Neuron (torch-neuronx)](torch-neuronx/README.md#training) | Sample training scripts for training various PyTorch models on AWS Trainium | Trn1, Trn1n & Inf2 |
 
 | Usage | Description | Instance Type |
-| --- | --- | --- | --- |
-| [Megatron-LM for Neuron](https://github.com/aws-neuron/aws-neuron-reference-for-megatron-lm) | A library that enables large-scale distributed training of language models such as GPT and is adapted from Megatron-LM. | Trn1, Trn1n |
+| --- | --- | --- |
 | [Nemo Megatron for Neuron](https://github.com/aws-neuron/neuronx-nemo-megatron) | A library that enables large-scale distributed training of language models such as Llama and is adapted from Nemo Megatron. | Trn1, Trn1n |
 | [AWS Neuron samples for ParallelCluster](https://github.com/aws-neuron/aws-neuron-parallelcluster-samples) | How to use AWS ParallelCluster to build HPC compute cluster that uses trn1 compute nodes to run your distributed ML training job.  | Trn1, Trn1n |
 | [AWS Neuron samples for EKS](https://github.com/aws-neuron/aws-neuron-eks-samples) | The samples in this repository demonstrate the types of patterns that can be used to deliver inference and distributed training on EKS using Inferentia and Trainium. | Trn1, Trn1n |
