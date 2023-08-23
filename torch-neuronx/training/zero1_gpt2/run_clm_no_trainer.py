@@ -87,7 +87,6 @@ torch.utils.checkpoint.checkpoint = torch_xla.utils.checkpoint.checkpoint
 try:
     from utilities.reporting import Metric, post_metrics
 except ImportError:
-    print("Error: could not import HeartBeat utilities")
     Metric = post_metrics = lambda *args, **kwargs: None
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
