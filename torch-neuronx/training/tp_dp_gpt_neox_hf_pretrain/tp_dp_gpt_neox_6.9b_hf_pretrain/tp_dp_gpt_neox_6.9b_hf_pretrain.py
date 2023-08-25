@@ -273,6 +273,52 @@ def get_model():
                 self.query_key_value.bias.data.zero_()
                 self.dense.bias.data.zero_()
 
+        def _attn(self, query, key, value, attention_mask=None, head_mask=None):
+            # q, k, v: [bs, num_attention_heads, seq_len, attn_head_size]
+            # compute causal mask from causal mask buffer
+            batch_size, num_attention_heads, query_length, attn_head_size = query.size()
+            key_length = key.size(-2)
+
+            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
+
+            query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
+            key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
+            attn_scores = torch.zeros(
+                batch_size * num_attention_heads,
+                query_length,
+                key_length,
+                dtype=query.dtype,
+                device=key.device,
+            )
+            attn_scores = torch.baddbmm(
+                attn_scores,
+                query,
+                key.transpose(1, 2),
+                beta=1.0,
+                alpha=(torch.tensor(1.0, dtype=self.norm_factor.dtype, device=self.norm_factor.device) / self.norm_factor),
+            )
+            attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
+
+            # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
+            # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
+            # Use a negative number for mask_value instead of dtype.min for a compiler walk-around
+            mask_value = torch.tensor(-10000.0, dtype=attn_scores.dtype).to(attn_scores.device)
+            attn_scores = torch.where(causal_mask, attn_scores, mask_value)
+
+            if attention_mask is not None:
+                # Apply the attention mask
+                attn_scores = attn_scores + attention_mask
+
+            attn_weights = torch.nn.functional.softmax(attn_scores, dim=-1)
+            attn_weights = attn_weights.to(value.dtype)
+
+            # Mask heads if we want to
+            if head_mask is not None:
+                attn_weights = attn_weights * head_mask
+
+            attn_output = torch.matmul(attn_weights, value)
+            return attn_output, attn_weights
+
     class GPTNeoXMLP(modeling_gpt_neox.GPTNeoXMLP):
         def __init__(self, config):
             super().__init__(config)
