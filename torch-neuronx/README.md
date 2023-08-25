@@ -48,6 +48,7 @@ The following samples are available for LLM tensor parallel inference:
 | [facebook/opt-13b](transformers-neuronx/inference/facebook-opt-13b-sampling.ipynb) | Inf2 & Trn1 |
 | [facebook/opt-30b](transformers-neuronx/inference/facebook-opt-30b-sampling.ipynb) | Inf2 & Trn1 |
 | [facebook/opt-66b](transformers-neuronx/inference/facebook-opt-66b-sampling.ipynb) | Inf2 |
+| [meta-llama/Llama-2-13b](transformers-neuronx/inference/meta-llama-2-13b-sampling.ipynb) | Inf2 & Trn1 |
 
 ## Microbenchmarking
 

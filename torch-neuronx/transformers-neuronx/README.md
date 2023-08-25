@@ -13,3 +13,4 @@ The following samples are available for LLM tensor parallel inference:
 | [facebook/opt-13b](inference/facebook-opt-13b-sampling.ipynb) | Inf2 & Trn1 |
 | [facebook/opt-30b](inference/facebook-opt-30b-sampling.ipynb) | Inf2 & Trn1 |
 | [facebook/opt-66b](inference/facebook-opt-66b-sampling.ipynb) | Inf2 |
+| [meta-llama/Llama-2-13b](inference/meta-llama-2-13b-sampling.ipynb) | Inf2 & Trn1 |
