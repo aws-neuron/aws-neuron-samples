@@ -21,6 +21,8 @@ The following samples are available for training:
 | [hf_sentiment_analysis](training/hf_sentiment_analysis)     | Examples of training Hugging Face bert-base-cased model for a text classification task with Trn1 Single Neuron and Distributed Training | DataParallel |
 | [customop_mlp](training/customop_mlp)     | Examples of training a multilayer perceptron model with a custom Relu operator on a single Trn1 | DataParallel |
 | [tp_dp_gpt_neox_20b_hf_pretrain](training/tp_dp_gpt_neox_20b_hf_pretrain)     | Training GPT-NEOX 20B model using neuronx-distributed | Tensor Parallel & DataParallel |
+| [tp_dp_gpt_neox_6.9b_hf_pretrain](training/tp_dp_gpt_neox_hf_pretrain
+/tp_dp_gpt_neox_6.9b_hf_pretrain)     | Training GPT-NEOX 6.9B model using neuronx-distributed | Tensor Parallel & DataParallel |
 
 
 ## Inference
@@ -42,7 +44,10 @@ The following samples are available for inference:
 | [UNet](inference/pretrained_unet_inference_on_trn1.ipynb)         | Image Segmentation                                                                         | [unet](https://github.com/milesial/Pytorch-UNet) |
 | [VGG](inference/tv_pretrained_vgg_inference_on_trn1.ipynb)         | Image Classification                | [vgg](https://pytorch.org/vision/main/models/generated/torchvision.models.vgg11.html) |
 | [Multimodal Perceiver](inference/hf_pretrained_perceiver_multimodal_inference.ipynb)         | Video Classification and Autoencoding               | [Multimodal Perceiver](https://huggingface.co/deepmind/multimodal-perceiver) |
-
+| [Language Perceiver](inference/hf_pretrained_perceiver_language_inference.ipynb)         | Text Classification              | [Language Perceiver](https://huggingface.co/deepmind/language-perceiver) |
+| [Vision Perceiver](inference/hf_pretrained_perceiver_multimodal_inference.ipynb)         | Image Classification              | [Vision Perceiver Convolutional Processing](https://huggingface.co/deepmind/vision-perceiver-conv) |
+| [CLIP Base](inference/hf_pretrained_clip_base_inference_on_inf2.ipynb)         | Image Classification                | [CLIP Base](https://huggingface.co/openai/clip-vit-base-patch32) |
+| [CLIP Large](inference/hf_pretrained_clip_large_inference_on_inf2.ipynb)         | Image Classification               | [CLIP Large](https://huggingface.co/openai/clip-vit-large-patch14) |
 
 The following samples are available for LLM tensor parallel inference:
 
