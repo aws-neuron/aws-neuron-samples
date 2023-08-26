@@ -20,6 +20,8 @@ The following samples are available for training:
 | [hf_bert_jp](training/hf_bert_jp)                           | Fine-tuning & Deployment Hugging Face BERT Japanese model                                                                               | DataParallel |
 | [hf_sentiment_analysis](training/hf_sentiment_analysis)     | Examples of training Hugging Face bert-base-cased model for a text classification task with Trn1 Single Neuron and Distributed Training | DataParallel |
 | [customop_mlp](training/customop_mlp)     | Examples of training a multilayer perceptron model with a custom Relu operator on a single Trn1 | DataParallel |
+| [tp_dp_gpt_neox_20b_hf_pretrain](training/tp_dp_gpt_neox_20b_hf_pretrain)     | Training GPT-NEOX 20B model using neuronx-distributed | Tensor Parallel & DataParallel |
+
 
 ## Inference
 
@@ -36,6 +38,7 @@ The following samples are available for inference:
 | [HuggingFace Stable Diffusion 1.5 (512x512)](inference/hf_pretrained_sd15_512_inference.ipynb)         | Text to image generation                                                                       | [stable-diffusion](https://huggingface.co/runwayml/stable-diffusion-v1-5) |
 | [HuggingFace Stable Diffusion 2.1 (512x512)](inference/hf_pretrained_sd2_512_inference.ipynb)         | Text to image generation                                                                       | [stable-diffusion](https://huggingface.co/stabilityai/stable-diffusion-2) |
 | [HuggingFace Stable Diffusion 2.1 (768x768)](inference/hf_pretrained_sd2_768_inference.ipynb)         | Text to image generation                                                                      | [stable-diffusion](https://huggingface.co/stabilityai/stable-diffusion-2) |
+| [HuggingFace Stable Diffusion XL 1.0 (1024x1024)](inference/hf_pretrained_sdxl_1024_inference.ipynb)         | Text to image generation                                                                      | [stable-diffusion](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0) |
 | [UNet](inference/pretrained_unet_inference_on_trn1.ipynb)         | Image Segmentation                                                                         | [unet](https://github.com/milesial/Pytorch-UNet) |
 | [VGG](inference/tv_pretrained_vgg_inference_on_trn1.ipynb)         | Image Classification                | [vgg](https://pytorch.org/vision/main/models/generated/torchvision.models.vgg11.html) |
 | [Multimodal Perceiver](inference/hf_pretrained_perceiver_multimodal_inference.ipynb)         | Video Classification and Autoencoding               | [Multimodal Perceiver](https://huggingface.co/deepmind/multimodal-perceiver) |
