@@ -45,7 +45,7 @@ The following samples are available for inference:
 | [Multimodal Perceiver](inference/hf_pretrained_perceiver_multimodal_inference.ipynb)         | Video Classification and Autoencoding               | [multimodal-perceiver](https://huggingface.co/deepmind/multimodal-perceiver) |
 | [Language Perceiver](inference/hf_pretrained_perceiver_language_inference.ipynb)         | Text Classification              | [language-perceiver](https://huggingface.co/deepmind/language-perceiver) |
 | [Vision Perceiver](inference/hf_pretrained_perceiver_vision_inference.ipynb)         | Image Classification              | [vision-perceiver-conv](https://huggingface.co/deepmind/vision-perceiver-conv) |
-| [CLIP Base](inference/hf_pretrained_clip_base_inference_on_inf2.ipynb)         | Image Classification                | [clip-vit-base-patch32)](https://huggingface.co/openai/clip-vit-base-patch32) |
+| [CLIP Base](inference/hf_pretrained_clip_base_inference_on_inf2.ipynb)         | Image Classification                | [clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) |
 | [CLIP Large](inference/hf_pretrained_clip_large_inference_on_inf2.ipynb)         | Image Classification               | [clip-vit-large-patch14](https://huggingface.co/openai/clip-vit-large-patch14) |
 
 The following samples are available for LLM tensor parallel inference:
