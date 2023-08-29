@@ -1,0 +1,4 @@
+transformers==4.26.0
+regex
+tensorboard
+datasets
