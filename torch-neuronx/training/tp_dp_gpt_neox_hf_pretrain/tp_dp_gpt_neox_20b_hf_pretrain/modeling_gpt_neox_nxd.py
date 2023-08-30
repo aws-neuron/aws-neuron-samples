@@ -28,6 +28,8 @@ from transformers.models.gpt_neox.modeling_gpt_neox import (
     apply_rotary_pos_emb,
 )
 
+from utils import scatter_to_sequence_parallel_region
+
 from functools import partial
 def _init_normal(std, w):
     return nn.init.normal_(w, mean=0.0, std=std)
@@ -348,7 +350,7 @@ class GPTNeoXModelNxD(GPTNeoXModel):
         # NxD code change: sequence parallel uses seq_len as the 0-th dim
         if self.config.sequence_parallel_enabled:
             hidden_states = hidden_states.transpose(0, 1).contiguous()
-            hidden_states = mappings.scatter_to_sequence_parallel_region(hidden_states)
+            hidden_states = scatter_to_sequence_parallel_region(hidden_states)
 
         presents = () if use_cache else None
         all_attentions = () if output_attentions else None
