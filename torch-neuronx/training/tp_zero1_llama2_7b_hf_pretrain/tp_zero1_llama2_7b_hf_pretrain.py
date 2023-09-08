@@ -35,27 +35,41 @@ import torch_xla.distributed.xla_multiprocessing as xmp
 import torch_xla.distributed.xla_backend
 import numpy as np
 from transformers import (
+    AdamW,
     default_data_collator,
     set_seed,
-    modeling_utils,
-    GPTNeoXConfig,
+    LlamaConfig,
 )
 from transformers.optimization import get_linear_schedule_with_warmup
 
+import copy
 from torch.utils.tensorboard import SummaryWriter
 import inspect
 import requests
-from neuronx_distributed.parallel_layers import parallel_state, checkpointing, move_model_to_device
+from neuronx_distributed.parallel_layers import parallel_state, layers, grads, checkpointing
+from neuronx_distributed.utils.model_utils import move_model_to_device
+from neuronx_distributed.parallel_layers.grads import bucket_allreduce_gradients
 import datasets
 
-from modeling_gpt_neox_nxd import GPTNeoXForCausalLMNxD
 from neuronx_distributed.optimizer import NeuronZero1Optimizer
 from adamw_fp32_optim_params import AdamW_FP32OptimParams
+from modeling_llama2_nxd import LlamaForCausalLMNxD
+
+# For PT autocast.
+torch.cuda.is_bf16_supported = lambda: True
+
+# Workaround for NaNs seen with transformers version >= 4.21.0
+# https://github.com/aws-neuron/aws-neuron-sdk/issues/593
+import transformers.modeling_utils as modeling_utils
+
+if os.environ.get("XLA_USE_BF16") or os.environ.get("XLA_DOWNCAST_BF16"):
+    modeling_utils.get_parameter_dtype = lambda x: torch.bfloat16
 
 datetime_str = str(datetime.now())
 results = {
     "inference_success": 1
 }
+
 
 Metric = namedtuple("Metric", ["name", "value", "units", "additional_data"])
 
@@ -246,15 +260,20 @@ def create_pretraining_dataset(
     )
     return train_dataloader
 
-def get_model():
-    model_name = "EleutherAI/gpt-neox-20b"
-    config = GPTNeoXConfig.from_pretrained(model_name)
+def get_model(flags):
+    model_path, seq_len = flags.model_path, flags.seq_len
+    config = LlamaConfig.from_pretrained(model_path)
     config.use_cache = False
-    config.sequence_parallel_enabled = True
+    config.max_position_embeddings = max(config.max_position_embeddings, seq_len)
+    if flags.num_layers > 0:
+        config.num_hidden_layers = flags.num_layers
+    if flags.sequence_parallel_enabled:
+        config.sequence_parallel_enabled = True
+    if flags.selective_checkpoint_enabled:
+        config.selective_checkpoint_enabled = True
     xm.master_print(config)
-    model = GPTNeoXForCausalLMNxD(config)
+    model = LlamaForCausalLMNxD(config)
     xm.master_print(model)
-    model.gradient_checkpointing_enable()
     return model
 
 def get_dtype(model) -> str:
@@ -268,7 +287,7 @@ def get_dtype(model) -> str:
             return "torch.bfloat16"
         if "torch.double" in str(model.dtype):
             return "torch.float32"
-    return str(model.dtype)
+    return str(model.dtype)    
 
 def allreduce_sequence_parallel_gradients(optimizer):
     """ All-reduce layernorm parameters across model parallel nodes when sequence parallelism is used.
@@ -286,9 +305,10 @@ def allreduce_sequence_parallel_gradients(optimizer):
                         if sequence_parallel_param:
                             grads.append(p.grad.data)
     for grad in grads:
+        # sum v.s. average: sum
         reduce_from_tensor_model_parallel_region(grad)
 
-def train_gpt_neox(flags):
+def train_llama(flags):
     parallel_state.initialize_model_parallel(tensor_model_parallel_size=flags.tensor_parallel_size)
     world_size = parallel_state.get_data_parallel_size()
     is_root = xm.is_master_ordinal(local=False)
@@ -297,7 +317,7 @@ def train_gpt_neox(flags):
     worker_init = WorkerInitObj(flags.seed)
     device = xm.xla_device()
 
-    model = get_model()
+    model = get_model(flags)
     move_model_to_device(model, device)
     model.train()
 
@@ -322,14 +342,22 @@ def train_gpt_neox(flags):
         },
     ]
 
-    optimizer = NeuronZero1Optimizer(
-        optimizer_grouped_parameters,
-        AdamW_FP32OptimParams,
-        lr=flags.lr,
-        pin_layout=False,
-        sharding_groups=parallel_state.get_data_parallel_group(as_list=True),
-        grad_norm_groups=parallel_state.get_tensor_model_parallel_group(as_list=True),
-    )
+    if flags.use_mix_precision:
+        optimizer_cls = AdamW_FP32OptimParams
+    else:
+        optimizer_cls = AdamW
+
+    if flags.use_zero_1:
+        optimizer = NeuronZero1Optimizer(
+            optimizer_grouped_parameters,
+            optimizer_cls,
+            lr=flags.lr,
+            pin_layout=False,
+            sharding_groups=parallel_state.get_data_parallel_group(as_list=True),
+            grad_norm_groups=parallel_state.get_tensor_model_parallel_group(as_list=True),
+        )
+    else:
+        optimizer = optimizer_cls(optimizer_grouped_parameters, flags.lr)
     optimizer.zero_grad()
 
     if is_root:
@@ -369,7 +397,7 @@ def train_gpt_neox(flags):
         )
 
     def train_loop_fn(
-        model, optimizer, train_loader, epoch, global_step, training_ustep, running_loss
+        model, optimizer, train_loader, epoch, global_step, training_ustep, running_loss, use_zero_1
     ):
         for _, data in enumerate(train_loader):
             training_ustep += 1
@@ -397,9 +425,15 @@ def train_gpt_neox(flags):
                 running_loss_reduced_detached = running_loss_reduced.detach()
                 running_loss.zero_()
 
-                # sequence parallel allreduce
-                allreduce_sequence_parallel_gradients(optimizer)                
-
+                allreduce_sequence_parallel_gradients(optimizer)
+                if not use_zero_1:
+                    # all-reduce and then clip. Order matters.
+                    if parallel_state.get_data_parallel_size() > 1:
+                        bucket_allreduce_gradients(xm._fetch_gradients(optimizer))
+                    max_grad_norm = 1.0
+                    grads.clip_grad_norm(
+                        model.parameters(), max_grad_norm
+                    )  # Gradient clipping is not in AdamW anymore
                 optimizer.step()
 
                 with torch.no_grad():
@@ -448,10 +482,10 @@ def train_gpt_neox(flags):
 
     if flags.resume_ckpt:
         state_dict = checkpointing.load(flags.output_dir, model)
+        optimizer.load_state_dict(state_dict["optimizer"])
         global_step = state_dict["global_step"]
         epoch = state_dict["epoch"]
         scheduler_state_dict = state_dict["scheduler"]
-        optimizer.load_sharded_state_dict(flags.output_dir)
     else:
         global_step = 0
         epoch = 0
@@ -492,6 +526,7 @@ def train_gpt_neox(flags):
             global_step,
             training_ustep,
             running_loss,
+            flags.use_zero_1,
         )
 
         if is_root and not extract_graphs_only:
@@ -556,13 +591,14 @@ def train_gpt_neox(flags):
                     ),
                 ]
                 metric_writer.store_metrics(metric_data)
+            # TODO may incur HOST OOM
             state_dict = {
-                "model": model.state_dict(),
-                "global_step": global_step,
-                "epoch": epoch,
-                "scheduler": scheduler.state_dict()
+               "model": model.state_dict(),
+               "global_step": global_step,
+               "epoch": epoch,
+               "scheduler": scheduler.state_dict()
             }
-            checkpointing.save(state_dict, flags.output_dir, down_cast_bf16=True)
+            checkpointing.save(state_dict, flags.output_dir)
             optimizer.save_sharded_state_dict(flags.output_dir)
             return
 
@@ -571,11 +607,17 @@ def train_gpt_neox(flags):
 
 def _mp_fn(index, flags):
     torch.set_default_tensor_type("torch.FloatTensor")
-    train_gpt_neox(flags)
+    train_llama(flags)
     xm.rendezvous("_mp_fn finished")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--model_path",
+        type=str,
+        help="Model weight and config path.",
+    )
     parser.add_argument(
         "--data_dir",
         type=str,
@@ -593,7 +635,7 @@ if __name__ == "__main__":
         default="results.json",
         help="training metrics results file",
     )
-    parser.add_argument("--batch_size", type=int, default=1, help="Worker batch size.")
+    parser.add_argument("--batch_size", type=int, default=8, help="Worker batch size.")
     parser.add_argument(
         "--max_steps",
         type=int,
@@ -610,15 +652,17 @@ if __name__ == "__main__":
         default=12349,
         help="Random seed. Worker seed is this value + worker rank.",
     )
-    parser.add_argument("--lr", type=float, help="Learning rate.")
+    parser.add_argument("--lr", type=float, default=4e-4, help="Learning rate.")
     parser.add_argument(
         "--warmup_steps",
         type=int,
+        default=2000,
         help="Number of warmup accumulation-steps for learning rate .",
     )
     parser.add_argument(
         "--grad_accum_usteps",
         type=int,
+        default=64,
         help="Gradient accumulation micro-steps (an accumulation-step has <value> micro-steps.",
     )
     parser.add_argument(
@@ -634,9 +678,39 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--tensor_parallel_size",
-        default=8,
+        default=2,
         type=int,
         help="Tensor parallel size"
+    )
+    parser.add_argument(
+        "--seq_len",
+        default=2048,
+        type=int,
+        help="Sequence length"
+    )
+    parser.add_argument(
+        "--use_mix_precision", action="store_true", help="Use mix precision."
+    )
+    parser.add_argument(
+        "--use_zero_1", action="store_true", help="Use ZeRO-1."
+    )
+    parser.add_argument(
+        "--num_layers",
+        type=int,
+        default=-1,
+        help="Override number of layers for this LLaMA model",
+    )
+    parser.add_argument(
+        "--sequence_parallel_enabled",
+        default=False,
+        action="store_true",
+        help="Enable sequence parallel",
+    )
+    parser.add_argument(
+        "--selective_checkpoint_enabled",
+        default=False,
+        action="store_true",
+        help="Enable selective checkpoint",
     )
 
     args = parser.parse_args(sys.argv[1:])
@@ -644,9 +718,12 @@ if __name__ == "__main__":
     if args.steps_this_run < 0:
         args.steps_this_run = args.max_steps
 
-    # Workaround for NaNs seen with transformers version >= 4.21.0
-    # https://github.com/aws-neuron/aws-neuron-sdk/issues/593
-    modeling_utils.get_parameter_dtype = lambda x: torch.bfloat16
+    os.environ["NEURON_RT_STOCHASTIC_ROUNDING_EN"] = "1"
+    if args.use_mix_precision:
+        os.environ["XLA_DOWNCAST_BF16"]="1"
+    else:
+        os.environ["XLA_USE_BF16"]="1"
+
 
     # WORLD_SIZE is set by torchrun
     if os.environ.get("WORLD_SIZE"):
@@ -654,4 +731,3 @@ if __name__ == "__main__":
         _mp_fn(0, args)
     else:
         xmp.spawn(_mp_fn, args=(args,))
-
