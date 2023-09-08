@@ -20,13 +20,15 @@
 import os
 import math
 import warnings
-from functools import partial
-from typing import Callable, Iterable, Optional, Tuple, Union
+from copy import deepcopy
+from typing import Callable, Iterable, Tuple
+from collections import abc as container_abcs
+from collections import defaultdict
+from itertools import chain
 
 import torch
 from torch import nn
 from torch.optim import Optimizer
-from transformers.utils import logging
 from transformers.utils.versions import require_version
 
 class AdamW_FP32OptimParams(Optimizer):
@@ -80,6 +82,67 @@ class AdamW_FP32OptimParams(Optimizer):
         defaults = {"lr": lr, "betas": betas, "eps": eps, "weight_decay": weight_decay, "correct_bias": correct_bias}
         self.upcast_optim_states = os.environ.get('XLA_DOWNCAST_BF16', '0') == '1'
         super().__init__(params, defaults)
+
+    # load_state_dict is needed to resovle the casting issue when loading checkpoints
+    def load_state_dict(self, state_dict):
+        # deepcopy, to be consistent with module API
+        state_dict = deepcopy(state_dict)
+        # Validate the state_dict
+        groups = self.param_groups
+        saved_groups = state_dict['param_groups']
+
+        if len(groups) != len(saved_groups):
+            raise ValueError("loaded state dict has a different number of "
+                             "parameter groups")
+        param_lens = (len(g['params']) for g in groups)
+        saved_lens = (len(g['params']) for g in saved_groups)
+        if any(p_len != s_len for p_len, s_len in zip(param_lens, saved_lens)):
+            raise ValueError("loaded state dict contains a parameter group "
+                             "that doesn't match the size of optimizer's group")
+
+        # Update the state
+        id_map = {old_id: p for old_id, p in
+                  zip(chain.from_iterable((g['params'] for g in saved_groups)),
+                      chain.from_iterable((g['params'] for g in groups)))}
+
+        def cast(param, value, key=None):
+            r"""Make a deep copy of value, casting all tensors to device of param."""
+            if isinstance(value, torch.Tensor):
+                # Floating-point types are a bit special here. They are the only ones
+                # that are assumed to always match the type of params.
+                # Make sure state['step'] is not casted https://github.com/pytorch/pytorch/issues/74424
+                if (key != "step"):
+                    value = value.to(param.device)
+                    if param.is_floating_point():
+                        value = value.to(param.dtype)
+                        if value.dtype == torch.float32 and self.upcast_optim_states:
+                            value = value.double()
+                return value
+            elif isinstance(value, dict):
+                return {k: cast(param, v, key=k) for k, v in value.items()}
+            elif isinstance(value, container_abcs.Iterable):
+                return type(value)(cast(param, v) for v in value)
+            else:
+                return value
+
+        # Copy state assigned to params (and cast tensors to appropriate types).
+        # State that is not assigned to params is copied as is (needed for
+        # backward compatibility).
+        state = defaultdict(dict)
+        for k, v in state_dict['state'].items():
+            if k in id_map:
+                param = id_map[k]
+                state[param] = cast(param, v)
+            else:
+                state[k] = v
+
+        # Update parameter groups, setting their 'params' value
+        def update_group(group, new_group):
+            new_group['params'] = group['params']
+            return new_group
+        param_groups = [
+            update_group(g, ng) for g, ng in zip(groups, saved_groups)]
+        self.__setstate__({'state': state, 'param_groups': param_groups})
 
     def step(self, closure: Callable = None):
         """
