@@ -372,6 +372,16 @@ def train_gpt_neox(flags):
         model, optimizer, train_loader, epoch, global_step, training_ustep, running_loss
     ):
         for _, data in enumerate(train_loader):
+            # warm up the dataloader to the saved state
+            if flags.resume_ckpt:
+                if training_ustep < global_step_resume * flags.grad_accum_usteps % len(train_loader):
+                    training_ustep += 1
+                    xm.master_print(f"dataset warmup: current training_ustep={training_ustep}")
+                    continue
+                elif training_ustep == global_step_resume * flags.grad_accum_usteps % len(train_loader):
+                    training_ustep = global_step_resume * flags.grad_accum_usteps
+                    xm.master_print(f"dataset warmup ended: current training_ustep={training_ustep}")
+
             training_ustep += 1
             input_ids = data["input_ids"]
             attention_mask = data["attention_mask"]
@@ -447,11 +457,10 @@ def train_gpt_neox(flags):
     scheduler_state_dict = None
 
     if flags.resume_ckpt:
-        state_dict = checkpointing.load(flags.output_dir, model)
-        global_step = state_dict["global_step"]
+        state_dict = checkpointing.load(flags.resume_ckpt_dir, model)
+        global_step = global_step_resume = state_dict["global_step"]
         epoch = state_dict["epoch"]
         scheduler_state_dict = state_dict["scheduler"]
-        optimizer.load_sharded_state_dict(flags.output_dir)
     else:
         global_step = 0
         epoch = 0
@@ -462,11 +471,15 @@ def train_gpt_neox(flags):
         optimizer,
         num_warmup_steps=flags.warmup_steps,
         num_training_steps=flags.max_steps,
-        last_epoch=epoch if scheduler_state_dict else -1,
+        last_epoch=-1,
     )
 
     if scheduler_state_dict:
         scheduler.load_state_dict(scheduler_state_dict)
+
+    # load optimizer state after scheduler init to avoid overwriting first LR
+    if flags.resume_ckpt:
+        optimizer.load_sharded_state_dict(flags.resume_ckpt_dir)
 
     assert os.path.exists(
         os.path.expanduser(flags.data_dir)
@@ -631,6 +644,12 @@ if __name__ == "__main__":
         "--resume_ckpt",
         action="store_true",
         help="Resume from checkpoint at resume_step."
+    )
+    parser.add_argument(
+        "--resume_ckpt_dir",
+        type=str,
+        default="./resume_ckpt_dir",
+        help="Directory for checkpoints to be loaded.",
     )
     parser.add_argument(
         "--tensor_parallel_size",
