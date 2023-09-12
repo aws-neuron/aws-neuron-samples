@@ -33,7 +33,7 @@ LR=2.0e-5
 # model path
 MODEL_PATH=$SCRIPT_DIR
 # data path
-DATA_PATH="$HOME/wikicorpus_datasets/wikicorpus_llama_v2_tokenized_4k"
+DATA_PATH="~/examples_datasets/wikicorpus_llama2_7B_tokenized_4k"
 # sequence length
 SEQ_LEN=4096
 
