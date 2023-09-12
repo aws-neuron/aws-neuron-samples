@@ -46,12 +46,14 @@ import copy
 from torch.utils.tensorboard import SummaryWriter
 import inspect
 import requests
-from neuronx_distributed.parallel_layers import parallel_state, layers, grads, checkpointing, move_model_to_device
+from neuronx_distributed.parallel_layers import parallel_state, layers, grads, checkpointing
+from neuronx_distributed.utils.model_utils import move_model_to_device
+from neuronx_distributed.parallel_layers.grads import bucket_allreduce_gradients
 import datasets
 
 from neuronx_distributed.optimizer import NeuronZero1Optimizer
-from adamw_fp32_optim_params import AdamW_FP32OptimParams
-from modeling_llama_nxd import LlamaForCausalLM
+from common_utils.optimizer.adamw_fp32_optim_params import AdamW_FP32OptimParams
+from modeling_llama_nxd import LlamaForCausalLMNxD
 
 # For PT autocast.
 torch.cuda.is_bf16_supported = lambda: True
@@ -264,20 +266,14 @@ def get_model(flags):
     config.use_cache = False
     config.max_position_embeddings = max(config.max_position_embeddings, seq_len)
     if flags.num_layers > 0:
-        config.num_hidden_layers = flag.num_layers
+        config.num_hidden_layers = flags.num_layers
     if flags.sequence_parallel_enabled:
         config.sequence_parallel_enabled = True
     if flags.selective_checkpoint_enabled:
         config.selective_checkpoint_enabled = True
     xm.master_print(config)
-    model = LlamaForCausalLM(config)
+    model = LlamaForCausalLMNxD(config)
     xm.master_print(model)
-    # Haozheng: selective checkpoint
-    # model.gradient_checkpointing_enable()
-    # if not os.environ.get("NEURON_EXTRACT_GRAPHS_ONLY", None):
-    #     trn_state_path = os.environ.get("TRN_STATE_PATH")
-    #     keys = model.load_state_dict(torch.load(f"{trn_state_path}/rest.pt"), strict=False)
-    #     xm.master_print(f"keys={keys}")
     return model
 
 def get_dtype(model) -> str:
@@ -409,9 +405,6 @@ def train_llama(flags):
             input_ids = data["input_ids"]
             attention_mask = data["attention_mask"]
             labels = data["labels"]
-            # Haozheng: attention mask optimization
-            # print("train_loop_fn: attention_mask.size() = ", attention_mask.size())
-            # print("train_loop_fn: attention_mask.detach().cpu() = ", attention_mask.detach().cpu())
             outputs = model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
@@ -435,12 +428,9 @@ def train_llama(flags):
 
                 allreduce_sequence_parallel_gradients(optimizer)
                 if not use_zero_1:
-                    # TODO xm.reduce_gradients may has accuracy issue
                     # all-reduce and then clip. Order matters.
                     if parallel_state.get_data_parallel_size() > 1:
-                        xm.reduce_gradients(
-                            optimizer, groups=parallel_state.get_data_parallel_group(as_list=True)
-                        )
+                        bucket_allreduce_gradients(xm._fetch_gradients(optimizer))
                     max_grad_norm = 1.0
                     grads.clip_grad_norm(
                         model.parameters(), max_grad_norm
@@ -603,14 +593,14 @@ def train_llama(flags):
                 ]
                 metric_writer.store_metrics(metric_data)
             # TODO may incur HOST OOM
-            #state_dict = {
-            #    "model": model.state_dict(),
-            #    "global_step": global_step,
-            #    "epoch": epoch,
-            #    "optimizer": optimizer.state_dict(),
-            #    "scheduler": scheduler.state_dict()
-            #}
-            #checkpointing.save(state_dict, flags.output_dir)
+            state_dict = {
+               "model": model.state_dict(),
+               "global_step": global_step,
+               "epoch": epoch,
+               "scheduler": scheduler.state_dict()
+            }
+            checkpointing.save(state_dict, flags.output_dir)
+            optimizer.save_sharded_state_dict(flags.output_dir)
             return
 
         epoch += 1

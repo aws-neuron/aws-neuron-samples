@@ -3,9 +3,9 @@
 #############################################
 # User defined parameters and env vars
 
-export NEURON_CC_FLAGS="--model-type=transformer --enable-experimental-O1 --enable-internal-call-graph --enable-saturate-infinity"
-#export NEURON_CC_FLAGS="--model-type transformer --enable-experimental-O1 --enable-internal-call-graph --enable-saturate-infinity --tensorizer-options=\'--no-keep-remat-dma-transpose --run-pg-layout-and-tiling\'"
-#export NEURON_NUM_RECENT_MODELS_TO_KEEP=2
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+export NEURON_CC_FLAGS="--model-type=transformer --enable-experimental-O1 --enable-saturate-infinity"
 export NEURON_FUSE_SOFTMAX=1
 
 # Async Runtime
@@ -31,22 +31,18 @@ WARMUP_STEPS=3
 # learning rate
 LR=2.0e-5
 # model path
-MODEL_PATH="/scalefsx/fanhaozh/llama2/weights/7B-hf"
+MODEL_PATH=$SCRIPT_DIR
 # data path
-DATA_PATH="/scalefsx/fuxinwe/llama2/data/huggingface/data-tokenized/wikicorpus_llama_v2_tokenized_4k"
-# state path
-TRN_STATE_PATH="/scalefsx/fanhaozh/llama2/llama2-7b/weight_process/7B/trn_states"
+DATA_PATH="$HOME/wikicorpus_datasets/wikicorpus_llama_v2_tokenized_4k"
 # sequence length
 SEQ_LEN=4096
 
 #############################################
 
-
 export NEURON_NUM_DEVICES=32
 NODE_ID=0
 WORLD_SIZE=1
 DISTRIBUTED_ARGS="--nproc_per_node $NEURON_NUM_DEVICES"
-
 if [ ! -z "$SLURM_NTASKS" ]; then
     WORLD_SIZE=$SLURM_NTASKS
     NODE_ID=$SLURM_NODEID
@@ -62,18 +58,9 @@ if [ ! -z "$SLURM_NTASKS" ]; then
     export FI_PROVIDER=efa
 fi
 
-# WORLD_SIZE=$SLURM_NTASKS
-# NODE_ID=$SLURM_NODEID
-# IFS= read -r -a NODE_LIST <<< $(scontrol show hostnames "$SLURM_JOB_NODELIST")
-# echo "NODE_LIST = $NODE_LIST"
-# MASTER_ADDRESS=$(echo $NODE_LIST | sed 's/ .*//g') # first one
-
-# echo "WORLD_SIZE=$WORLD_SIZE"
-# echo "NODE_ID=$NODE_ID"
-# echo "MASTER_ADDRESS=$MASTER_ADDRESS"
-
-# export FI_EFA_USE_DEVICE_RDMA=1
-# export FI_PROVIDER=efa
+echo "WORLD_SIZE=$WORLD_SIZE"
+echo "NODE_ID=$NODE_ID"
+echo "MASTER_ADDRESS=$MASTER_ADDRESS"
 
 sudo sysctl -w net.ipv4.ip_local_reserved_ports=44000,48620
 
@@ -101,11 +88,9 @@ if [ $NEURON_EXTRACT_GRAPHS_ONLY -gt 0 ]; then
     STEPS_THIS_RUN=2
     OUTPUT_LOG=log_compile-$NODE_ID.log
 else
-    STEPS_THIS_RUN=-1
+    STEPS_THIS_RUN=10
     OUTPUT_LOG=log_exe-$NODE_ID.log
 fi
-
-export TRN_STATE_PATH=$TRN_STATE_PATH
 
 echo TP_DEGREE=$TP_DEGREE
 echo USE_MIX_PRECISION=$USE_MIX_PRECISION
@@ -117,7 +102,6 @@ echo WARMUP_STEPS=$WARMUP_STEPS
 echo LR=$LR
 echo MODEL_PATH=$MODEL_PATH
 echo DATA_PATH=$DATA_PATH
-echo TRN_STATE_PATH=$TRN_STATE_PATH
 echo SEQ_LEN=$SEQ_LEN
 
 echo EXTRA_ARGS=$EXTRA_ARGS
@@ -126,9 +110,8 @@ echo ACC_STEPS=$ACC_STEPS
 echo STEPS_THIS_RUN=$STEPS_THIS_RUN
 echo OUTPUT_LOG=$OUTPUT_LOG
 
-# torchrun --nproc_per_node=$NEURON_RT_NUM_CORES --nnodes=$WORLD_SIZE --node_rank=$NODE_ID --master_addr=$MASTER_ADDRESS --master_port=44000 \
-    torchrun $DISTRIBUTED_ARGS \
-    main_llama.py \
+torchrun $DISTRIBUTED_ARGS \
+    tp_zero1_llama2_7b_hf_pretrain.py \
     --model_path $MODEL_PATH \
     --data_dir $DATA_PATH \
     --tensor_parallel_size $TP_DEGREE \
@@ -139,6 +122,7 @@ echo OUTPUT_LOG=$OUTPUT_LOG
     --lr $LR \
     --grad_accum_usteps $ACC_STEPS \
     --seq_len $SEQ_LEN \
+    --num_layers 4 \
     --sequence_parallel_enabled \
     --selective_checkpoint_enabled \
     $EXTRA_ARGS |& tee $OUTPUT_LOG
