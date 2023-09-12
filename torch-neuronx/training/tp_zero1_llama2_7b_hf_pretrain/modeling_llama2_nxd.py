@@ -59,30 +59,9 @@ from transformers.models.llama.modeling_llama import (
     LLAMA_INPUTS_DOCSTRING,
 )
 
-import os
-if not os.environ.get("NEURON_EXTRACT_GRAPHS_ONLY", None):
-    attn_cnt = 0
-    mlp_cnt = 0
-    def get_sharded_data(data, dim):
-        tp_rank = get_tensor_model_parallel_rank()
-        per_partition_size = data.shape[dim] // get_tensor_model_parallel_size()
-        if dim == 0:
-            return data[
-                per_partition_size * tp_rank : per_partition_size * (tp_rank + 1)
-            ].clone()
-        elif dim == 1:
-            return data[
-                :, per_partition_size * tp_rank : per_partition_size * (tp_rank + 1)
-            ].clone()
-        else:
-            raise Exception(
-                f"Partiton value of 0,1 are supported, found {dim}."
-            )
-
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LlamaConfig"
-
 
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
 def _make_causal_mask(
