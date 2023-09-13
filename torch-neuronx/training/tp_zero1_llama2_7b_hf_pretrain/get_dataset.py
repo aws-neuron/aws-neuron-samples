@@ -6,8 +6,10 @@ import os
 dataset_name = "wikicorpus"
 dataset_config_name = "raw_en"
 save_path = "~/examples_datasets/wikicorpus_llama2_7B_tokenized_4k"
+tokenizer_path = "~/examples/tp_zero1_llama2_7b_hf_pretrain"
 
 save_path = os.path.expanduser(save_path)
+tokenizer_path = os.path.expanduser(tokenizer_path)
 if not os.path.exists(save_path):
     os.makedirs(save_path)
 
@@ -15,7 +17,7 @@ block_size = 4096
 
 raw_datasets = load_dataset(dataset_name, dataset_config_name)
 
-tokenizer = AutoTokenizer.from_pretrained("~/examples/tp_zero1_llama2_7b_hf_pretrain")
+tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
 
 column_names = raw_datasets["train"].column_names
 text_column_name = "text" if "text" in column_names else column_names[0]
@@ -62,3 +64,4 @@ train_dataset = lm_datasets["train"]
 print(len(train_dataset))
 
 train_dataset.save_to_disk(save_path)
+
