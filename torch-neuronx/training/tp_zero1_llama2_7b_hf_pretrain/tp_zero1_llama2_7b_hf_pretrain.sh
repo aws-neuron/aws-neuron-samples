@@ -122,7 +122,6 @@ torchrun $DISTRIBUTED_ARGS \
     --lr $LR \
     --grad_accum_usteps $ACC_STEPS \
     --seq_len $SEQ_LEN \
-    --num_layers 4 \
     --sequence_parallel_enabled \
     --selective_checkpoint_enabled \
     $EXTRA_ARGS |& tee $OUTPUT_LOG
