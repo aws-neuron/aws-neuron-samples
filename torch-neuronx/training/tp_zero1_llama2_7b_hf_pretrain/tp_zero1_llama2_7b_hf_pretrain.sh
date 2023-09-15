@@ -25,9 +25,9 @@ GBS=256
 # micro batch size
 MBS=1
 # number of steps to run
-TOTAL_STEPS=300
+TOTAL_STEPS=10000
 # warmup steps
-WARMUP_STEPS=3
+WARMUP_STEPS=2000
 # learning rate
 LR=2.0e-5
 # model path
@@ -88,7 +88,7 @@ if [ $NEURON_EXTRACT_GRAPHS_ONLY -gt 0 ]; then
     STEPS_THIS_RUN=2
     OUTPUT_LOG=log_compile-$NODE_ID.log
 else
-    STEPS_THIS_RUN=10
+    STEPS_THIS_RUN=-1
     OUTPUT_LOG=log_exe-$NODE_ID.log
 fi
 
