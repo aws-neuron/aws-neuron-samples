@@ -240,7 +240,7 @@ class WorkerInitObj(object):
 def create_pretraining_dataset(
     data_dir, mini_batch_size, worker_init
 ):
-    train_data = datasets.load_from_disk(data_dir)
+    train_data = datasets.load_from_disk(os.path.expanduser(data_dir))
     train_sampler = DistributedSampler(
         train_data,
         num_replicas=parallel_state.get_data_parallel_size(),
