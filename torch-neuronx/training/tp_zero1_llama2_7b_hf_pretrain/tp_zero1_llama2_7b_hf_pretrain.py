@@ -304,7 +304,6 @@ def allreduce_sequence_parallel_gradients(optimizer):
                         sequence_parallel_param = getattr(p, 'sequence_parallel_enabled', False)
                         if sequence_parallel_param:
                             grads.append(p.grad.data)
-    xm.master_print("# sequence parallel parameters = ", len(grads))
     for grad in grads:
         # sum v.s. average: sum
         reduce_from_tensor_model_parallel_region(grad)
