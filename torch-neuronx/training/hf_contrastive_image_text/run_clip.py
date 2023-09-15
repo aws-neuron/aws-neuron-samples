@@ -49,8 +49,6 @@ from transformers import (
     AutoImageProcessor,
     AutoTokenizer,
     HfArgumentParser,
-    Trainer,
-    TrainingArguments,
     VisionTextDualEncoderModel,
     set_seed,
 )
@@ -58,17 +56,9 @@ from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
-# Set compiler flag to compile for transformer model type
-os.environ["NEURON_CC_FLAGS"] = os.environ.get('NEURON_CC_FLAGS',
-                                               '') + " --cache_dir=./compiler_cache"
-
-from transformers import __version__, Trainer
-Trainer._wrap_model = lambda self, model, training=True, dataloader=None: model
-
-# Workaround for NaNs seen with transformers version >= 4.21.0
-# https://github.com/aws-neuron/aws-neuron-sdk/issues/593
-if os.environ.get("XLA_USE_BF16") or os.environ.get("XLA_DOWNCAST_BF16"):
-    transformers.modeling_utils.get_parameter_dtype = lambda x: torch.bfloat16
+if not '..' in sys.path: sys.path.append('..')
+from common.hf_utils import TrnTrainingArguments as TrainingArguments
+from common.hf_utils import TrnTrainer as Trainer
 
 logger = logging.getLogger(__name__)
 
