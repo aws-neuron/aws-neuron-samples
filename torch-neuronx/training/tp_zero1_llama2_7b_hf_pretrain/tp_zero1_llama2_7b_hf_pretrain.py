@@ -52,7 +52,7 @@ from neuronx_distributed.parallel_layers.grads import bucket_allreduce_gradients
 import datasets
 
 from neuronx_distributed.optimizer import NeuronZero1Optimizer
-from common_utils.optimizer.adamw_fp32_optim_params import AdamW_FP32OptimParams
+from adamw_fp32_optim_params import AdamW_FP32OptimParams
 from modeling_llama2_nxd import LlamaForCausalLMNxD
 
 # For PT autocast.
