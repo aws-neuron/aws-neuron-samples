@@ -1,6 +1,6 @@
 # Change Log
 
-## September, 14th 2023
+## September, 15th 2023
 * Added notebook script to fine-tune ``deepmind/language-perceiver`` model using ``torch-neuronx``. 
 * Added notebook script to fine-tune ``clip-large`` model using ``torch-neuronx``.
 * Added ``SD XL Base+Refiner`` inference sample script using ``torch-neuronx``.
