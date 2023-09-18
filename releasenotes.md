@@ -1,10 +1,10 @@
 # Change Log
 
 ## September, 14th 2023
-* Added notebook script to fine-tune ``deepmind/language-perceiver`` model using ``torch-neuronx``. See `sample script <https://github.com/aws-neuron/aws-neuron-samples/tree/master/torch-neuronx/training/hf_text_classification/LanguagePerceiver.ipynb>`_
-* Added notebook script to fine-tune ``clip-large`` model using ``torch-neuronx``. See `sample script <https://github.com/aws-neuron/aws-neuron-samples/tree/master/torch-neuronx/training/hf_contrastive_image_text/CLIPLarge.ipynb>`_
-* Added ``SD XL Base+Refiner`` inference sample script using ``torch-neuronx``. See `sample script <https://github.com/aws-neuron/aws-neuron-samples/tree/master/torch-neuronx/inference/hf_pretrained_sdxl_base_and_refiner_1024_inference.ipynb>`_
-* Upgraded default ``diffusers`` library from 0.14.0 to latest 0.20.2 in ``Stable Diffusion 1.5`` and ``Stable Diffusion 2.1`` inference scripts. See `sample scripts <https://github.com/aws-neuron/aws-neuron-samples/tree/master/torch-neuronx/inference>`_
+* Added notebook script to fine-tune ``deepmind/language-perceiver`` model using ``torch-neuronx``. 
+* Added notebook script to fine-tune ``clip-large`` model using ``torch-neuronx``.
+* Added ``SD XL Base+Refiner`` inference sample script using ``torch-neuronx``.
+* Upgraded default ``diffusers`` library from 0.14.0 to latest 0.20.2 in ``Stable Diffusion 1.5`` and ``Stable Diffusion 2.1`` inference scripts. 
 * Removed the deprecated  ``--model-type=transformer-inference`` flag from ``Llama-2-13B`` model inference sample using ``transformers-neuronx``
 
 
