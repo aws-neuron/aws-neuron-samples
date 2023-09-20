@@ -1,5 +1,14 @@
 # Change Log
 
+## September, 15th 2023
+* Added notebook script to fine-tune ``deepmind/language-perceiver`` model using ``torch-neuronx``. 
+* Added notebook script to fine-tune ``clip-large`` model using ``torch-neuronx``.
+* Added ``SD XL Base+Refiner`` inference sample script using ``torch-neuronx``.
+* Upgraded default ``diffusers`` library from 0.14.0 to latest 0.20.2 in ``Stable Diffusion 1.5`` and ``Stable Diffusion 2.1`` inference scripts. 
+* Removed the deprecated  ``--model-type=transformer-inference`` flag from ``Llama-2-13B`` model inference sample using ``transformers-neuronx``
+
+
+
 ## August, 28th 2023
 * Added sample script for LLaMA V2 13B model inference using transformers-neuronx
 * Added samples for training GPT-NEOX 20B and 6.9B models using neuronx-distributed 
