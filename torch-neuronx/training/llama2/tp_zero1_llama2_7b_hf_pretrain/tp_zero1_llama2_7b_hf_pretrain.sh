@@ -27,7 +27,7 @@ MBS=1
 # number of steps to run
 TOTAL_STEPS=10000
 # warmup steps
-WARMUP_STEPS=2000
+WARMUP_STEPS=100
 # learning rate
 LR=2.0e-5
 # model path
