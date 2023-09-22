@@ -29,7 +29,7 @@ TOTAL_STEPS=10000
 # warmup steps
 WARMUP_STEPS=100
 # learning rate
-LR=2.0e-5
+LR=3.0e-4
 # model path
 MODEL_PATH=$SCRIPT_DIR
 # data path
