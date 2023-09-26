@@ -39,15 +39,15 @@ SEQ_LEN=4096
 
 #############################################
 
-export NEURON_NUM_DEVICES=32
+export NUM_NEURONCORES=32
 NODE_ID=0
 WORLD_SIZE=1
-DISTRIBUTED_ARGS="--nproc_per_node $NEURON_NUM_DEVICES"
+DISTRIBUTED_ARGS="--nproc_per_node $NUM_NEURONCORES"
 if [ ! -z "$SLURM_NTASKS" ]; then
     WORLD_SIZE=$SLURM_NTASKS
     NODE_ID=$SLURM_NODEID
     MASTER_ADDRESS=(`scontrol show hostnames $SLURM_JOB_NODELIST`)
-    DISTRIBUTED_ARGS="--nproc_per_node $NEURON_NUM_DEVICES --nnodes $WORLD_SIZE --node_rank $NODE_ID --master_addr $MASTER_ADDRESS --master_port 44000"
+    DISTRIBUTED_ARGS="--nproc_per_node $NUM_NEURONCORES --nnodes $WORLD_SIZE --node_rank $NODE_ID --master_addr $MASTER_ADDRESS --master_port 44000"
     if [ $NODE_ID -eq 0 ]; then
         echo "WORLD_SIZE=$WORLD_SIZE"
         echo "NODE_ID=$NODE_ID"
@@ -65,7 +65,7 @@ echo "MASTER_ADDRESS=$MASTER_ADDRESS"
 sudo sysctl -w net.ipv4.ip_local_reserved_ports=44000,48620
 
 export NEURON_RT_NUM_CORES=32
-export NEURON_NUM_DEVICES=$NEURON_RT_NUM_CORES
+export NUM_NEURONCORES=$NEURON_RT_NUM_CORES
 export TPU_NUM_DEVICES=$NEURON_RT_NUM_CORES
 export TPU_CHIPS_PER_HOST_BOUNDS=$NEURON_RT_NUM_CORES
 export NEURON_RT_ROOT_COMM_ID=localhost:48620
