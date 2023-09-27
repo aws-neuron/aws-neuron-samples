@@ -221,8 +221,8 @@ class LlamaAttentionNxD(LlamaAttention):
             input_is_parallel=True,
             sequence_parallel_enabled=self.config.sequence_parallel_enabled,
         )
-        self.num_heads = neuronx_dist_utils.divide(config.num_attention_heads, get_tensor_model_parallel_size()) 
-        self.num_key_value_heads = neuronx_dist_utils.divide(config.num_key_value_heads, get_tensor_model_parallel_size())  
+        self.num_heads = neuronx_dist_utils.divide(config.num_attention_heads, get_tensor_model_parallel_size())
+        self.num_key_value_heads = neuronx_dist_utils.divide(config.num_key_value_heads, get_tensor_model_parallel_size())
         move_model_to_device(self, xm.xla_device())
 
     def forward(
