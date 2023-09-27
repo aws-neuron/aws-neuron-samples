@@ -398,7 +398,7 @@ def train_gpt_neox(flags):
                 running_loss.zero_()
 
                 # sequence parallel allreduce
-                allreduce_sequence_parallel_gradients(optimizer)                
+                allreduce_sequence_parallel_gradients(optimizer)
 
                 optimizer.step()
 
