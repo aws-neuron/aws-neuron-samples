@@ -59,6 +59,10 @@ from transformers.models.llama.modeling_llama import (
     LLAMA_INPUTS_DOCSTRING,
 )
 
+from functools import partial
+def _init_normal(std, w):
+    return nn.init.normal_(w, mean=0.0, std=std)
+
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LlamaConfig"
@@ -123,12 +127,14 @@ class LlamaMLPNxD(LlamaMLP):
         self.intermediate_size = config.intermediate_size
         self.act_fn = ACT2FN[config.hidden_act]
 
+        init_method = partial(_init_normal, config.initializer_range)
         self.gate_up_proj = ColumnParallelLinear(
             self.hidden_size,
             2 * self.intermediate_size,
             stride=2,
             bias=False,
             gather_output=False,
+            init_method=init_method,
             sequence_parallel_enabled=self.config.sequence_parallel_enabled,
         )
         self.down_proj = RowParallelLinear(
@@ -136,10 +142,12 @@ class LlamaMLPNxD(LlamaMLP):
             self.hidden_size,
             bias=False,
             input_is_parallel=True,
+            init_method=init_method,
             sequence_parallel_enabled=self.config.sequence_parallel_enabled,
         )
         self.split_size = self.intermediate_size // get_tensor_model_parallel_size()
-        move_model_to_device(self, xm.xla_device())
+        if config.move_model_to_device:
+            move_model_to_device(self, xm.xla_device())
 
     def forward(self, x):
         if self.pretraining_tp > 1:
@@ -182,6 +190,7 @@ class LlamaAttentionNxD(LlamaAttention):
             )
         self._init_rope()
 
+        init_method = partial(_init_normal, config.initializer_range)
         if self.num_heads == self.num_key_value_heads:
             self.qkv_proj = ColumnParallelLinear(
                 self.hidden_size,
@@ -189,6 +198,7 @@ class LlamaAttentionNxD(LlamaAttention):
                 stride=3,
                 bias=False,
                 gather_output=False,
+                init_method=init_method,
                 sequence_parallel_enabled=self.config.sequence_parallel_enabled,
             )
             self.split_size = self.num_heads * self.head_dim // get_tensor_model_parallel_size()
@@ -198,6 +208,7 @@ class LlamaAttentionNxD(LlamaAttention):
                 self.num_heads * self.head_dim,
                 bias=False,
                 gather_output=False,
+                init_method=init_method,
                 sequence_parallel_enabled=self.config.sequence_parallel_enabled,
             )
             self.k_proj = ColumnParallelLinear(
@@ -205,6 +216,7 @@ class LlamaAttentionNxD(LlamaAttention):
                 self.num_key_value_heads * self.head_dim,
                 bias=False,
                 gather_output=False,
+                init_method=init_method,
                 sequence_parallel_enabled=self.config.sequence_parallel_enabled,
             )
             self.v_proj = ColumnParallelLinear(
@@ -212,6 +224,7 @@ class LlamaAttentionNxD(LlamaAttention):
                 self.num_key_value_heads * self.head_dim,
                 bias=False,
                 gather_output=False,
+                init_method=init_method,
                 sequence_parallel_enabled=self.config.sequence_parallel_enabled,
             )
         self.o_proj = RowParallelLinear(
@@ -219,11 +232,13 @@ class LlamaAttentionNxD(LlamaAttention):
             self.hidden_size,
             bias=False,
             input_is_parallel=True,
+            init_method=init_method,
             sequence_parallel_enabled=self.config.sequence_parallel_enabled,
         )
         self.num_heads = neuronx_dist_utils.divide(config.num_attention_heads, get_tensor_model_parallel_size())
         self.num_key_value_heads = neuronx_dist_utils.divide(config.num_key_value_heads, get_tensor_model_parallel_size())
-        move_model_to_device(self, xm.xla_device())
+        if config.move_model_to_device:
+            move_model_to_device(self, xm.xla_device())
 
     def forward(
         self,
@@ -366,7 +381,8 @@ class LlamaModelNxD(LlamaModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = ParallelEmbedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        init_method = partial(_init_normal, config.initializer_range)
+        self.embed_tokens = ParallelEmbedding(config.vocab_size, config.hidden_size, self.padding_idx, init_method=init_method)
         self.layers = nn.ModuleList([LlamaDecoderLayerNxD(config) for _ in range(config.num_hidden_layers)])
         self.norm = LlamaRMSNormNxD(config.hidden_size, eps=config.rms_norm_eps, sequence_parallel_enabled=config.sequence_parallel_enabled)
 
@@ -538,11 +554,13 @@ class LlamaForCausalLMNxD(LlamaForCausalLM):
         self.pretraining_tp = config.pretraining_tp
         self.vocab_size = config.vocab_size
 
+        init_method = partial(_init_normal, config.initializer_range)
         self.lm_head = ColumnParallelLinear(
             config.hidden_size,
             config.vocab_size,
             bias=False,
-            gather_output=False
+            gather_output=False,
+            init_method=init_method,
         )
         # Initialize weights and apply final processing
         self.post_init()
