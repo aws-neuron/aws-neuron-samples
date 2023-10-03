@@ -85,6 +85,8 @@ try:
 except ImportError:
     Metric = post_metrics = lambda *args, **kwargs: None
 
+PJRT_DEVICE = (os.environ.get("PJRT_DEVICE", None) == 'NEURON')
+
 class Throughput:
     def __init__(self, batch_size, world_size, grad_accum_usteps, moving_avg_window_size=10):
         self.seqs_per_iteration = batch_size * world_size * grad_accum_usteps
@@ -525,6 +527,7 @@ def train_bert_hdf5(flags):
                             print('Keeping only {} checkpoints. Deleting {}'.format(flags.num_ckpts_to_keep, old_file))
                             os.remove(old_file)
             if global_step >= flags.steps_this_run:
+                xm.rendezvous("before_throughput_check") # avoid multi-node hang due to throughput threshold assert by root worker
                 if is_root and not extract_graphs_only:
                     # record aggregate & final statistics in the metrics file
                     additional_data = {
@@ -560,7 +563,23 @@ def train_bert_hdf5(flags):
 
         epoch += 1
 
+
+def init_process_group():
+    if PJRT_DEVICE:
+        import torch_xla.experimental.pjrt_backend
+        import torch_xla.experimental.pjrt as pjrt
+        dist.init_process_group('xla', init_method='pjrt://')
+    else:
+        dist.init_process_group('xla')
+
+
+# Uncomment the lines below to enable torchrun backtrace summary (https://pytorch.org/docs/stable/elastic/errors.html)
+#from torch.distributed.elastic.multiprocessing.errors import record
+#@record
 def _mp_fn(index, flags):
+    # If using xmp.spawn still need to init process group
+    if not dist.is_torchelastic_launched():
+        init_process_group()            
     torch.set_default_tensor_type('torch.FloatTensor')
     train_bert_hdf5(flags)
     xm.rendezvous("_mp_fn finished")
@@ -602,7 +621,7 @@ if __name__ == '__main__':
 
     # WORLD_SIZE is set by torchrun
     if os.environ.get("WORLD_SIZE"):
-        dist.init_process_group('xla')
+        init_process_group()
         _mp_fn(0, args)
     else:
         xmp.spawn(_mp_fn, args=(args,))

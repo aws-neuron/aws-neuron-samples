@@ -22,7 +22,17 @@ PH1_END_STEP=28125 # the steps ran for phase1
 LR=2.8e-4
 WORLD_SIZE_JOB=1
 RANK_NODE=0
-NUM_NEURONCORES=32
+
+if [ -e /opt/aws/neuron/bin/neuron-ls ]; then
+    NUM_DEVICES=`/opt/aws/neuron/bin/neuron-ls -j | jq '. | length'`
+    NC_PER_DEVICE=`/opt/aws/neuron/bin/neuron-ls -j | jq '.[0].nc_count'`
+    let NUM_NEURONCORES=$NUM_DEVICES*$NC_PER_DEVICE
+    echo "Found $NUM_NEURONCORES NeuronCores"
+else
+    NUM_NEURONCORES=32
+    echo "neuron-ls not installed (aws-neuronx-tools); using default $NUM_NEURONCORES NeuronCores"
+fi
+
 DISTRIBUTED_ARGS="--nproc_per_node $NUM_NEURONCORES"
 OUTPUT_DIR=output
 LOG_FILE=log_ph2_bf16
@@ -46,8 +56,10 @@ if [ ! -z "$SLURM_NTASKS" ]; then
     echo $DISTRIBUTED_ARGS
     OUTPUT_DIR=output_$SLURM_JOB_ID
     LOG_FILE=${LOG_FILE}_${RANK_NODE}_${WORLD_SIZE_JOB}
-    CACHE_DIR=$HOME/neuron_cache/bert/`hostname`
-    export NEURON_CC_FLAGS="--cache_dir=$CACHE_DIR"
+    if [ -z "$NEURON_COMPILE_CACHE_URL" ]; then
+        CACHE_DIR=$HOME/neuron_cache/bert/`hostname`
+        export NEURON_CC_FLAGS="--cache_dir=$CACHE_DIR"
+    fi
     export TRANSFORMERS_CACHE=$HOME/hf_cache/`hostname`/hub
     # HF ver > 4.22: Move cache ahead of time to prevent multiple workers moving at the same time
     python -c "import transformers.utils as utils; utils.move_cache()"
@@ -97,10 +109,10 @@ torchrun $DISTRIBUTED_ARGS dp_bert_large_hf_pretrain_hdf5.py $ADD_ARGS \
         --max_steps $MAX_STEPS \
         --steps_this_run $steps_this_run \
         --warmup_steps $WARM_UP \
-        --expected_average_throughput $expected_average_throughput |& tee $OUTPUT_DIR/$LOG_FILE &
-wait %1
+        --expected_average_throughput $expected_average_throughput |& tee $OUTPUT_DIR/$LOG_FILE
 
-ret_val=$?
+ret_val=${PIPESTATUS[0]}
+echo $ret_val
 if [ $ret_val -eq 0 ]; then
     success=1
 else
