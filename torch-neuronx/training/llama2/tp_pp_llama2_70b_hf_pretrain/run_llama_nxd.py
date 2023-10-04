@@ -36,6 +36,7 @@ from neuronx_distributed.pipeline import NxDPPModel
 from neuronx_distributed.parallel_layers import parallel_state
 from neuronx_distributed.optimizer import NeuronZero1Optimizer
 from neuronx_distributed.parallel_layers import mappings
+from neuronx_distributed.parallel_layers.checkpointing import save, load
 from transformers import LlamaConfig
 import transformers.modeling_utils as modeling_utils
 try:
@@ -43,11 +44,8 @@ try:
 except ImportError:
     deferred_init = None
 
-
-from modeling_llama_nxd import LlamaForCausalLMNxD as LlamaForCausalLM
-from modeling_llama_nxd import LlamaRMSNormNxD as LlamaRMSNorm
-from modeling_llama_nxd import LlamaDecoderLayerNxD as LlamaDecoderLayer
-from optimizer.adamw_fp32_optim_params import AdamW_FP32OptimParams
+from modeling_llama_nxd import LlamaForCausalLM, LlamaRMSNorm, LlamaDecoderLayer
+from adamw_fp32_optim_params import AdamW_FP32OptimParams
 from activation_checkpoint import apply_checkpoint
 from training_utils import get_param_groups_by_weight_decay, get_learning_rate_scheduler, create_llama_pretraining_dataset
 
@@ -100,6 +98,10 @@ def train_llama(args):
     dp_rank = get_data_parallel_rank()
     dp_size = get_data_parallel_size()
     tp_rank = get_tensor_model_parallel_rank()
+    if args.loading_step != -1:
+        user_content = torch.load(f"{args.checkpoint_dir}/step{args.loading_step}/user_content.pt")
+    else:
+        user_content = None
 
     config = LlamaConfig.from_pretrained(args.training_config)
     config.use_cache = False
@@ -136,6 +138,8 @@ def train_llama(args):
     if not config.selective_checkpoint_enabled:
         apply_checkpoint(model)
     model.move_model_to_device()
+    if args.save_load_xser>0 and args.loading_step != -1:
+        load(f"{args.checkpoint_dir}/step{args.loading_step}/model", obj=model, model_key=None, load_xser=args.save_load_xser>0)
 
     param_groups = get_param_groups_by_weight_decay(model)
     if args.use_zero1_optimizer > 0:
@@ -159,8 +163,20 @@ def train_llama(args):
             param_groups, betas=(args.beta1, args.beta2), lr=args.lr, weight_decay=args.weight_decay
         )
 
+    if args.loading_step != -1:
+        load(f"{args.checkpoint_dir}/step{args.loading_step}/optimizer", obj=optimizer, model_key=None, load_xser=args.save_load_xser>0)
+
     lr_scheduler = get_learning_rate_scheduler(optimizer, args)
+    if args.loading_step != -1:
+        lr_scheduler_state = user_content["lr_scheduler"]
+        lr_scheduler.load_state_dict(lr_scheduler_state)
+
     train_dataloader = create_llama_pretraining_dataset(args.training_dir, args.train_batch_size, args.seed, dp_size, dp_rank)
+    if user_content is not None and "batch_idx" in user_content:
+        resume_batch_idx = user_content["batch_idx"]
+    else:
+        resume_batch_idx = None
+    
     print("Creating sample dataloader finised")
 
 
@@ -186,6 +202,11 @@ def train_llama(args):
         if torch.distributed.get_rank() == 0:
             print(f"Epoch {epoch}")
         for batch_idx, batch in enumerate(train_dataloader):
+            if resume_batch_idx is not None and batch_idx <= resume_batch_idx:
+                if torch.distributed.get_rank() == 0:
+                    print(f"skipping batch {batch_idx}")
+                continue
+            print(f"3 going to rank {torch.distributed.get_rank()}")
             start = time.time()
             input_ids = batch["input_ids"]
             attention_mask = batch["attention_mask"]
@@ -227,7 +248,26 @@ def train_llama(args):
                         torch.sum(input_ids.detach().cpu()).item(),
                         total_steps,
                     )
-
+            # Saving checkpoints
+            if (args.checkpoint_freq > 0) and (total_steps % args.checkpoint_freq == 0):
+                ckpt_start = time.time()
+                base_dir = f"{args.checkpoint_dir}/step{total_steps}"
+                local_state_dict = model.local_state_dict()
+                save(local_state_dict, f"{base_dir}/model", save_xser=args.save_load_xser>0)
+                local_state_dict = optimizer.state_dict()
+                save(local_state_dict, f"{base_dir}/optimizer", save_xser=args.save_load_xser>0)
+                user_content = {"total_steps": total_steps, "lr_scheduler": lr_scheduler.state_dict(), "batch_idx": batch_idx, "cli_args": args.__dict__}
+                ckpt_end = time.time()
+                if torch.distributed.get_rank() == 0:
+                    torch.save(user_content, f"{base_dir}/user_content.pt")
+                    print(f"step {total_steps} checkpoint saved to {base_dir}, total time {ckpt_end-ckpt_start}s")
+                # Delete older checkpoints
+                if args.num_kept_checkpoint > 0:
+                    import os, shutil
+                    ckpt_to_del = f"{args.checkpoint_dir}/step{total_steps-args.checkpoint_freq*args.num_kept_checkpoint}"
+                    if dist.get_rank() == 0 and os.path.exists(ckpt_to_del):
+                        print(f"deleting old checkpoint {ckpt_to_del}")
+                        shutil.rmtree(ckpt_to_del)
             if total_steps >= args.max_steps:
                 break
 
@@ -258,6 +298,8 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint_freq", type=int, default=100000, help="save checkpoint freq")
     parser.add_argument("--checkpoint_dir", type=str, default=None)
     parser.add_argument("--loading_step", type=int, default=-1, help="load from step, -1 means no load")
+    parser.add_argument("--num_kept_checkpoint", type=int, default=-1, help="number of checkpoints kept, old checkpoint will get deleted")
+    parser.add_argument("--save_load_xser", type=int, default=1, help="save/load with xla serialization")
 
     # optimization
     opt_grp = parser.add_argument_group(title="optimization", description="arguments for optimization")

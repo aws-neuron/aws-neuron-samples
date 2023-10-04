@@ -41,16 +41,18 @@ from neuronx_distributed.utils.model_utils import move_model_to_device
 from neuronx_distributed.parallel_layers import mappings
 import torch_xla.core.xla_model as xm
 
+from transformers.models.llama.modeling_llama import LlamaForCausalLM as LlamaForCausalLMHF
+from transformers.models.llama.modeling_llama import LlamaRMSNorm as LlamaRMSNormHF
+from transformers.models.llama.modeling_llama import LlamaDecoderLayer as LlamaDecoderLayerHF
+from transformers.models.llama.modeling_llama import LlamaMLP as LlamaMLPHF
+from transformers.models.llama.modeling_llama import LlamaAttention as LlamaAttentionHF
+from transformers.models.llama.modeling_llama import LlamaModel as LlamaModelHF
+
+
 from transformers.models.llama.modeling_llama import (
-    LlamaRMSNorm,
     LlamaRotaryEmbedding,
     LlamaLinearScalingRotaryEmbedding,
-    LlamaMLP,
-    LlamaAttention,
-    LlamaDecoderLayer,
     LlamaPreTrainedModel,
-    LlamaModel,
-    LlamaForCausalLM,
     LlamaForSequenceClassification,
     rotate_half,
     apply_rotary_pos_emb,
@@ -100,7 +102,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-class LlamaRMSNormNxD(LlamaRMSNorm):
+class LlamaRMSNorm(LlamaRMSNormHF):
     def __init__(self, hidden_size, eps=1e-6, sequence_parallel_enabled=False):
         """
         LlamaRMSNorm is equivalent to T5LayerNorm
@@ -118,7 +120,7 @@ class LlamaRMSNormNxD(LlamaRMSNorm):
         return self.weight * hidden_states.to(input_dtype)
 
 
-class LlamaMLPNxD(LlamaMLP):
+class LlamaMLP(LlamaMLPHF):
     def __init__(self, config):
         nn.Module.__init__(self)
         self.config = config
@@ -169,7 +171,7 @@ class LlamaMLPNxD(LlamaMLP):
         return down_proj
 
 
-class LlamaAttentionNxD(LlamaAttention):
+class LlamaAttention(LlamaAttentionHF):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: LlamaConfig):
@@ -354,21 +356,21 @@ class LlamaAttentionNxD(LlamaAttention):
         return attn_output, attn_weights, past_key_value
 
 
-class LlamaDecoderLayerNxD(LlamaDecoderLayer):
+class LlamaDecoderLayer(LlamaDecoderLayerHF):
     def __init__(self, config: LlamaConfig):
         nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
-        self.self_attn = LlamaAttentionNxD(config=config)
-        self.mlp = LlamaMLPNxD(config)
-        self.input_layernorm = LlamaRMSNormNxD(config.hidden_size, eps=config.rms_norm_eps, sequence_parallel_enabled=config.sequence_parallel_enabled)
-        self.post_attention_layernorm = LlamaRMSNormNxD(config.hidden_size, eps=config.rms_norm_eps, sequence_parallel_enabled=config.sequence_parallel_enabled)
+        self.self_attn = LlamaAttention(config=config)
+        self.mlp = LlamaMLP(config)
+        self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps, sequence_parallel_enabled=config.sequence_parallel_enabled)
+        self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps, sequence_parallel_enabled=config.sequence_parallel_enabled)
 
 
 @add_start_docstrings(
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     LLAMA_START_DOCSTRING,
 )
-class LlamaModelNxD(LlamaModel):
+class LlamaModel(LlamaModelHF):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LlamaDecoderLayer`]
 
@@ -383,8 +385,8 @@ class LlamaModelNxD(LlamaModel):
 
         init_method = partial(_init_normal, config.initializer_range)
         self.embed_tokens = ParallelEmbedding(config.vocab_size, config.hidden_size, self.padding_idx, init_method=init_method)
-        self.layers = nn.ModuleList([LlamaDecoderLayerNxD(config) for _ in range(config.num_hidden_layers)])
-        self.norm = LlamaRMSNormNxD(config.hidden_size, eps=config.rms_norm_eps, sequence_parallel_enabled=config.sequence_parallel_enabled)
+        self.layers = nn.ModuleList([LlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps, sequence_parallel_enabled=config.sequence_parallel_enabled)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -545,12 +547,12 @@ class LlamaModelNxD(LlamaModel):
         )
 
 
-class LlamaForCausalLMNxD(LlamaForCausalLM):
+class LlamaForCausalLM(LlamaForCausalLMHF):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         LlamaPreTrainedModel.__init__(self, config)
-        self.model = LlamaModelNxD(config)
+        self.model = LlamaModel(config)
         self.pretraining_tp = config.pretraining_tp
         self.vocab_size = config.vocab_size
 

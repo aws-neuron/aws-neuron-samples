@@ -7,6 +7,7 @@ sudo sysctl -w net.ipv4.ip_local_reserved_ports=44000
 export FI_EFA_USE_DEVICE_RDMA=1
 export FI_PROVIDER=efa
 export FI_EFA_FORK_SAFE=1
+export NEURON_RT_NUM_CORES=32
 
 export NEURON_FUSE_SOFTMAX=1
 export NEURON_RT_ASYNC_EXEC_MAX_INFLIGHT_REQUESTS=5
@@ -14,7 +15,7 @@ export NEURON_TRANSFER_WITH_STATIC_RING_OPS=""
 export MALLOC_ARENA_MAX=128
 export XLA_DOWNCAST_BF16=1
 export NEURON_RT_STOCHASTIC_ROUNDING_EN=1
-export NEURON_CC_FLAGS="--model-type=transformer --distribution-strategy=nemo --enable-saturate-infinity --enable-mixed-precision-accumulation --cache_dir=/shared/fewu/neuron_cache_PP_new/$NODEID/"
+export NEURON_CC_FLAGS="--model-type=transformer --distribution-strategy=nemo --enable-saturate-infinity --cache_dir=/shared/fewu/neuron_cache_PP_new/$NODEID/"
 
 PROCESSES_PER_NODE=32
 WORLD_SIZE=1
