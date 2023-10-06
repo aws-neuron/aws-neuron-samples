@@ -108,6 +108,7 @@ def train():
                     logger.print_training_update(
                     device,
                     step,
+                    FLAGS.lr,
                     loss.item(),
                     step_throughput,
                     epoch,
@@ -128,8 +129,8 @@ def train():
                 if is_root:
                     step_throughput = throughput.get_throughput()
                     logger.test_throughputs.append(step_throughput)
-                if step % FLAGS.log_steps == 0:
-                    logger.print_test_update(device, step_throughput, None, epoch, step)
+                    if step % FLAGS.log_steps == 0:
+                        logger.print_test_update(device, step_throughput, None, epoch, step)
         accuracy = accuracy / max(len(loader), 1)
         accuracy = xm.mesh_reduce('test_accuracy', accuracy, np.mean)
         return accuracy
