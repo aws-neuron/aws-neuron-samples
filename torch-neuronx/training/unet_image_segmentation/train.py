@@ -5,13 +5,16 @@ from datetime import datetime
 import numpy as np
 import torch
 import torch.distributed as dist
+from torch.utils.data import Dataset
+import torch_xla.distributed.xla_backend
 import torch.nn as nn
 import torch.optim as optim
 import torch_xla
+import torch_xla.debug.metrics as met
 import torch_xla.distributed.parallel_loader as pl
+import torch_xla.utils.utils as xu
 import torch_xla.core.xla_model as xm
 import torch_xla.distributed.xla_multiprocessing as xmp
-from torch.utils.data import Dataset
 from torchvision import transforms as T
 from PIL import Image
 import glob
