@@ -10,14 +10,23 @@ from torch.optim.lr_scheduler import _LRScheduler
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.tensorboard import SummaryWriter
+
 import torchvision
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
-from transformers import (
-  AutoModelForImageClassification,
-  AutoConfig
-)
-import timm
+
+try:
+  from transformers import (
+    AutoModelForImageClassification,
+    AutoConfig
+  )
+except:
+  print("cannot import transformers")
+
+try:
+  import timm
+except:
+  print("cannot import timm")
 
 SUPPORTED_PLATFORMS = ['torchvision', 'transformers', 'timm']
 
@@ -199,7 +208,7 @@ def build_train_parser():
   parser.add_argument('--model', default='resnet50', help="Image classification model.")
   parser.add_argument('--platform', default='torchvision', choices=SUPPORTED_PLATFORMS, help="The Platform where the model is from (torchvision/transformers/timm).")
   parser.add_argument('--pretrained', action='store_true', help="Use model from Pre-trained.")
-  parser.add_argument('--data_dir', type=str, default="/home/ubuntu/examples_datasets/imagenet", help="Image classification dataset directory.")
+  parser.add_argument('--data_dir', type=str, default="", help="Image classification dataset directory.")
   parser.add_argument('--logdir', type=str, default="log_training", help="Training log directory.")
   parser.add_argument('--batch_size', type=int, default=8, help="Batch size per core used in training.")
   parser.add_argument('--num_epochs', type=int, default=2, help="Number of training epochs.")
