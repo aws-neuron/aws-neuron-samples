@@ -152,6 +152,8 @@ def train():
 
     if is_root:
         time_to_train = time.time() - train_start
+        xm.master_print("TrainLoss: {:.4f}".format(loss.item()))
+        xm.master_print("TrainRuntime {} minutes".format(round(time_to_train/60, 4)))
 
     if FLAGS.do_eval:
         if is_root:
@@ -167,12 +169,7 @@ def train():
             average_test_throughput = round(sum(logger.test_throughputs)/len(logger.test_throughputs), 4)
             xm.master_print('Average test throughput: {:.4f}'.format(average_test_throughput))
             xm.master_print('Max test throughput: {:.4f}'.format(max(logger.test_throughputs)))
-            xm.master_print('Max Accuracy(Dice_score): {:.2f}%'.format(max_accuracy))
-            
-    if is_root:
-        xm.master_print("TrainLoss: {:.4f}".format(loss.item()))
-        xm.master_print("TrainRuntime {} minutes".format(round(time_to_train/60, 4)))
-        xm.master_print("TrainMaxThroughput {} seq/s".format(max(logger.train_throughputs)))
+            xm.master_print('Accuracy(Dice_score): {:.2f}'.format(max_accuracy))
 
 
 def _mp_fn(index, flags):
