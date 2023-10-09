@@ -7,15 +7,12 @@ sudo sysctl -w net.ipv4.ip_local_reserved_ports=44000
 export FI_EFA_USE_DEVICE_RDMA=1
 export FI_PROVIDER=efa
 export FI_EFA_FORK_SAFE=1
-export NEURON_RT_NUM_CORES=32
 
 export NEURON_FUSE_SOFTMAX=1
 export NEURON_RT_ASYNC_EXEC_MAX_INFLIGHT_REQUESTS=5
-export NEURON_TRANSFER_WITH_STATIC_RING_OPS=""
 export MALLOC_ARENA_MAX=128
 export XLA_DOWNCAST_BF16=1
-export NEURON_RT_STOCHASTIC_ROUNDING_EN=1
-export NEURON_CC_FLAGS="--model-type=transformer --distribution-strategy=nemo --enable-saturate-infinity --cache_dir=/shared/fewu/neuron_cache_PP_new/$NODEID/"
+export NEURON_CC_FLAGS="--model-type=transformer --distribution-strategy=nemo --enable-saturate-infinity"
 
 PROCESSES_PER_NODE=32
 WORLD_SIZE=1
@@ -48,13 +45,21 @@ mkdir -p $LOG_PATH
 echo "Nodeinfo NODEID $NODEID hostname $HOSTNAME"
 echo $DISTRIBUTED_ARGS
 
-
+# Global batch size
 GBS=512
+# Input sequence length
 SEQ_LEN=4096
+# Pipeline parallel degree
 PP_DEGREE=8
+# Tensor parallel degree
 TP_DEGREE=8
+# Data paralell size
 DP=$(($NEURON_RT_NUM_CORES * $WORLD_SIZE / $TP_DEGREE / $PP_DEGREE))
+# Batch size per model replica
 BS=$(($GBS / $DP))
+# Number microbatches for pipeline execution
+# Setting same as BS so each microbatch contains a single datasample
+NUM_MICROBATCHES=$BS
 DATA_PATH="~/examples_datasets/wikicorpus_llama2_7B_tokenized_4k"
 
 
@@ -69,14 +74,14 @@ fi
 
 torchrun $DISTRIBUTED_ARGS run_llama_nxd.py \
     --train_batch_size $BS \
-    --use_deferred_init 1 \
+    --use_meta_device_init 1 \
     --training_dir $DATA_PATH \
     --training_config $SCRIPT_DIR \
     --max_steps $max_steps \
     --seq_len $SEQ_LEN \
     --pipeline_parallel_size $PP_DEGREE \
     --tensor_parallel_size $TP_DEGREE \
-    --num_microbatches $BS \
+    --num_microbatches $NUM_MICROBATCHES \
     --lr 0.00015 \
     --min_lr 1e-05 \
     --beta1 0.9 \

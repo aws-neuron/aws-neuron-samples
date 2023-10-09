@@ -31,6 +31,7 @@ from neuronx_distributed.parallel_layers.parallel_state import (
     get_tensor_model_parallel_rank,
     initialize_model_parallel,
 )
+from neuronx_distributed.parallel_layers import ColumnParallelLinear, RowParallelLinear, ParallelEmbedding
 from neuronx_distributed.parallel_layers.grads import clip_grad_norm
 from neuronx_distributed.pipeline import NxDPPModel
 from neuronx_distributed.parallel_layers import parallel_state
@@ -85,6 +86,30 @@ def create_partition(config, args):
         print(f"pipeline_cuts {pipeline_cuts}")
     return pipeline_cuts
 
+def save_checkpoint(args, model, optimizer, lr_scheduler, batch_idx, total_steps):
+    """
+    Save model/optimizer checkpoint with script level configs
+    """
+    ckpt_start = time.time()
+    base_dir = f"{args.checkpoint_dir}/step{total_steps}"
+    local_state_dict = model.local_state_dict()
+    save(local_state_dict, f"{base_dir}/model", save_xser=args.save_load_xser>0)
+    local_state_dict = optimizer.state_dict()
+    save(local_state_dict, f"{base_dir}/optimizer", save_xser=args.save_load_xser>0)
+    user_content = {"total_steps": total_steps, "lr_scheduler": lr_scheduler.state_dict(), "batch_idx": batch_idx, "cli_args": args.__dict__}
+    ckpt_end = time.time()
+    if torch.distributed.get_rank() == 0:
+        torch.save(user_content, f"{base_dir}/user_content.pt")
+        print(f"step {total_steps} checkpoint saved to {base_dir}, total time {ckpt_end-ckpt_start}s")
+    # Delete older checkpoints
+    if args.num_kept_checkpoint > 0:
+        import os, shutil
+        ckpt_to_del = f"{args.checkpoint_dir}/step{total_steps-args.checkpoint_freq*args.num_kept_checkpoint}"
+        if dist.get_rank() == 0 and os.path.exists(ckpt_to_del):
+            print(f"deleting old checkpoint {ckpt_to_del}")
+            shutil.rmtree(ckpt_to_del)
+
+
 def train_llama(args):
     if dist.get_rank() == 0:
         print(f"args {args}")
@@ -115,6 +140,29 @@ def train_llama(args):
         config.hidden_size = args.hidden_size
     if args.use_deferred_init > 0 and deferred_init is not None:
         model = deferred_init.deferred_init(LlamaForCausalLM, config)
+    elif args.use_meta_device_init > 0:
+        def init_weights(module):
+            """
+            Re-init weights after partition
+            Referred from HF transformers https://github.com/huggingface/transformers/blob/main/src/transformers/models/llama/modeling_llama.py#L690
+            """
+            if isinstance(module, torch.nn.Linear):
+                module.weight.data.normal_(mean=0.0, std=config.initializer_range)
+                if module.bias is not None:
+                    module.bias.data.zero_()
+            elif isinstance(module, torch.nn.Embedding):
+                module.weight.data.normal_(mean=0.0, std=config.initializer_range)
+                if module.padding_idx:
+                    module.weight.data[module.padding_idx].zero_()
+            elif isinstance(module, LlamaRMSNorm):
+                module.weight.data.fill_(1.0)
+            elif isinstance(module, (ParallelEmbedding, RowParallelLinear, ColumnParallelLinear)):
+                module.init_weight_cpu()
+                if hasattr(module, "bias") and module.bias is not None:
+                    module.bias.data.zero_()
+
+        with modeling_utils.init_on_device(device=torch.device("meta")):
+            model = LlamaForCausalLM(config)
     else:
         model = LlamaForCausalLM(config)
     num_params = sum([np.prod(p.size()) for p in model.parameters()])
@@ -130,7 +178,7 @@ def train_llama(args):
         input_names=["input_ids", "attention_mask", "labels"],
         pipeline_cuts=pipeline_cuts,
         trace_file_path=args.trace_file_path,
-        param_init_fn=None,
+        param_init_fn=init_weights if args.use_meta_device_init > 0 else None,
         leaf_module_cls=[LlamaRMSNorm.__name__],
         autowrap_modules=[mappings],
         use_zero1_optimizer=args.use_zero1_optimizer > 0,
@@ -153,6 +201,8 @@ def train_llama(args):
                 lr=args.lr,
                 pin_layout=False,
                 sharding_groups=parallel_state.get_data_parallel_group(as_list=True),
+                betas=(args.beta1, args.beta2),
+                weight_decay=args.weight_decay,
             )
     elif args.use_fp32_optimizer > 0:
         optimizer = AdamW_FP32OptimParams(
@@ -250,24 +300,7 @@ def train_llama(args):
                     )
             # Saving checkpoints
             if (args.checkpoint_freq > 0) and (total_steps % args.checkpoint_freq == 0):
-                ckpt_start = time.time()
-                base_dir = f"{args.checkpoint_dir}/step{total_steps}"
-                local_state_dict = model.local_state_dict()
-                save(local_state_dict, f"{base_dir}/model", save_xser=args.save_load_xser>0)
-                local_state_dict = optimizer.state_dict()
-                save(local_state_dict, f"{base_dir}/optimizer", save_xser=args.save_load_xser>0)
-                user_content = {"total_steps": total_steps, "lr_scheduler": lr_scheduler.state_dict(), "batch_idx": batch_idx, "cli_args": args.__dict__}
-                ckpt_end = time.time()
-                if torch.distributed.get_rank() == 0:
-                    torch.save(user_content, f"{base_dir}/user_content.pt")
-                    print(f"step {total_steps} checkpoint saved to {base_dir}, total time {ckpt_end-ckpt_start}s")
-                # Delete older checkpoints
-                if args.num_kept_checkpoint > 0:
-                    import os, shutil
-                    ckpt_to_del = f"{args.checkpoint_dir}/step{total_steps-args.checkpoint_freq*args.num_kept_checkpoint}"
-                    if dist.get_rank() == 0 and os.path.exists(ckpt_to_del):
-                        print(f"deleting old checkpoint {ckpt_to_del}")
-                        shutil.rmtree(ckpt_to_del)
+                save_checkpoint(args, model, optimizer, lr_scheduler, batch_idx, total_steps)
             if total_steps >= args.max_steps:
                 break
 
@@ -310,7 +343,8 @@ if __name__ == "__main__":
     opt_grp.add_argument("--use_zero1_optimizer", default=0, type=int, help="use_zero1_optimizer")
     opt_grp.add_argument("--seed", default=1234, type=int, help="random seed")
     opt_grp.add_argument("--use_amp", default=0, type=int, help="use amp data")
-    opt_grp.add_argument("--use_deferred_init", default=0, type=int, help="use amp data")
+    opt_grp.add_argument("--use_deferred_init", default=0, type=int, help="use torchdistx deferred initialization")
+    opt_grp.add_argument("--use_meta_device_init", default=0, type=int, help="use meta device initialization")
     opt_grp.add_argument("--use_selective_checkpoint", default=0, type=int, help="enable selective activation checkpointing")
     opt_grp.add_argument("--use_sequence_parallel", default=1, type=int, help="enable sequence parallelism")
 
