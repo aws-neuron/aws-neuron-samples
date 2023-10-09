@@ -39,6 +39,7 @@ from neuronx_distributed.parallel_layers import parallel_state
 from neuronx_distributed.optimizer import NeuronZero1Optimizer
 from neuronx_distributed.parallel_layers import mappings
 from neuronx_distributed.parallel_layers.checkpointing import save, load
+from neuronx_distributed.utils import model_utils
 from transformers import LlamaConfig
 import transformers.modeling_utils as modeling_utils
 try:
@@ -183,7 +184,7 @@ def train_llama(args):
                 if hasattr(module, "bias") and module.bias is not None:
                     module.bias.data.zero_()
 
-        with modeling_utils.init_on_device(device=torch.device("meta")):
+        with model_utils.init_on_device(device=torch.device("meta")):
             model = LlamaForCausalLM(config)
     else:
         model = LlamaForCausalLM(config)
