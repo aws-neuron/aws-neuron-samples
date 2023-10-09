@@ -21,7 +21,7 @@ USE_MIX_PRECISION=1
 # 0: use pure DP; 1: use ZeRO-1
 USE_ZERO_1=1
 # global batch size
-GBS=256
+GBS=1024
 # micro batch size
 MBS=1
 # number of steps to run
@@ -124,4 +124,5 @@ torchrun $DISTRIBUTED_ARGS \
     --seq_len $SEQ_LEN \
     --sequence_parallel_enabled \
     --selective_checkpoint_enabled \
+    --logging_interval 10 \
     $EXTRA_ARGS |& tee $OUTPUT_LOG

@@ -166,7 +166,14 @@ class LlamaMLP(LlamaMLPHF):
             down_proj = sum(down_proj)
         else:
             gate_proj, up_proj = self.gate_up_proj(x).split(self.split_size, dim=2)
-            down_proj = self.down_proj(self.act_fn(gate_proj) * up_proj)
+            def activation_mlp(gate_proj, up_proj):
+                activation_output = self.act_fn(gate_proj)
+                return (activation_output * up_proj)
+            if self.config.selective_checkpoint_enabled:
+                intermediate_states = torch.utils.checkpoint.checkpoint(activation_mlp, gate_proj, up_proj)
+            else:
+                intermediate_states = (self.act_fn(gate_proj) * up_proj)
+            down_proj = self.down_proj(intermediate_states)
 
         return down_proj
 
@@ -319,6 +326,12 @@ class LlamaAttention(LlamaAttentionHF):
             causal_mask = torch.triu(torch.ones((1, 1, q_len, kv_seq_len), device='xla'), diagonal=1).bool()
             attn_weights = attn_weights.masked_fill_(causal_mask, -10000.0)
 
+            # If we have XLA_USE_BF16 on, all the tensors would be typecasted to bf16. However, when we have
+            # fuse_softmax on, the input to the softmax remains in float32, causing some dtype conversion.
+            # Note: This would be fixed in the future release of torch_neuronx, where the dtype conversion would 
+            # be handled when BF16 flags are on.
+            if os.environ.get("XLA_USE_BF16", None) or os.environ.get("XLA_DOWNCAST_BF16", None):
+                attn_weights = attn_weights.type(torch.bfloat16)
             attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.double).to(query_states.dtype)
 
             attn_output = torch.matmul(attn_weights, value_states)
