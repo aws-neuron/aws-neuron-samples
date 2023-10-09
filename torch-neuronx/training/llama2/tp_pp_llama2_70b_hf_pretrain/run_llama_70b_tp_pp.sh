@@ -65,10 +65,10 @@ DATA_PATH="~/examples_datasets/wikicorpus_llama2_7B_tokenized_4k"
 
 if [ "$NEURON_EXTRACT_GRAPHS_ONLY" = "1" ]; then
     max_steps=10
-    tb_dir="/shared/fewu/tensorboard/llama70B_compile"
+    tb_dir="~/tensorboard/llama70B_compile"
 else
     max_steps=30000
-    tb_dir="/shared/fewu/tensorboard/llama70B_32nodes_${JOB_ID}"
+    tb_dir="~/tensorboard/llama70B_32nodes_${JOB_ID}"
     mkdir -p $tb_dir
 fi
 

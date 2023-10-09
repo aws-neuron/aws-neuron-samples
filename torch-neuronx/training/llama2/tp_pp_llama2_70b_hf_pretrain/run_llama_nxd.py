@@ -19,6 +19,7 @@ import argparse
 import os
 import random
 import time
+import queue
 
 import numpy as np
 import torch
@@ -109,6 +110,27 @@ def save_checkpoint(args, model, optimizer, lr_scheduler, batch_idx, total_steps
             print(f"deleting old checkpoint {ckpt_to_del}")
             shutil.rmtree(ckpt_to_del)
 
+class Throughput:
+    def __init__(
+        self, batch_size, world_size, grad_accum_usteps, moving_avg_window_size=10
+    ):
+        self.seqs_per_iteration = batch_size * world_size * grad_accum_usteps
+        self.moving_avg_window_size = moving_avg_window_size
+        self.moving_avg_window = queue.Queue()
+        self.window_time = 0
+        self.start_time = time.time()
+
+    def get_throughput(self):
+        step_time = time.time() - self.start_time
+        self.start_time += step_time
+        self.window_time += step_time
+        self.moving_avg_window.put(step_time)
+        window_size = self.moving_avg_window.qsize()
+        if window_size > self.moving_avg_window_size:
+            self.window_time -= self.moving_avg_window.get()
+            window_size -= 1
+        throughput = window_size * self.seqs_per_iteration / self.window_time
+        return throughput
 
 def train_llama(args):
     if dist.get_rank() == 0:
@@ -248,6 +270,9 @@ def train_llama(args):
         writer = None
 
     epoch = 0
+    throughput = Throughput(
+        args.train_batch_size, dp_size, 1
+    )
     while True:
         if torch.distributed.get_rank() == 0:
             print(f"Epoch {epoch}")
@@ -281,8 +306,9 @@ def train_llama(args):
             if should_print:
                 end = time.time()
                 iteration_time = end - start
+                tps = throughput.get_throughput()
                 print(
-                    f"step {total_steps} step_time {iteration_time}s loss {loss.detach().cpu().item()} grad norm {global_norm.item() if global_norm is not None else None}"
+                    f"step {total_steps} step_time {iteration_time}s throughput {tps} seq/s loss {loss.detach().cpu().item()} grad norm {global_norm.item() if global_norm is not None else None}"
                 )
                 if writer is not None:
                     current_lr = lr_scheduler.get_lr()[0]
@@ -293,6 +319,7 @@ def train_llama(args):
                         )
                     writer.add_scalar("lr", current_lr, total_steps)
                     writer.add_scalar("iteration_time", iteration_time, total_steps)
+                    writer.add_scalar("throughput", tps, total_steps)
                     writer.add_scalar(
                         "input_ids",
                         torch.sum(input_ids.detach().cpu()).item(),
