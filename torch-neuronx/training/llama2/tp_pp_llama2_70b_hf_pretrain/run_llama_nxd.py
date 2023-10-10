@@ -210,7 +210,7 @@ def train_llama(args):
         apply_checkpoint(model)
     model.move_model_to_device()
     if args.save_load_xser>0 and args.loading_step != -1:
-        load(f"{args.checkpoint_dir}/step{args.loading_step}/model", obj=model, model_key=None, load_xser=args.save_load_xser>0)
+        load(f"{args.checkpoint_dir}/step{args.loading_step}/model", model_or_optimizer=model, model_key=None, load_xser=args.save_load_xser>0)
 
     param_groups = get_param_groups_by_weight_decay(model)
     if args.use_zero1_optimizer > 0:
@@ -237,7 +237,7 @@ def train_llama(args):
         )
 
     if args.loading_step != -1:
-        load(f"{args.checkpoint_dir}/step{args.loading_step}/optimizer", obj=optimizer, model_key=None, load_xser=args.save_load_xser>0)
+        load(f"{args.checkpoint_dir}/step{args.loading_step}/optimizer", model_or_optimizer=optimizer, model_key=None, load_xser=args.save_load_xser>0)
 
     lr_scheduler = get_learning_rate_scheduler(optimizer, args)
     if args.loading_step != -1:
