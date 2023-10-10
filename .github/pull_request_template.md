@@ -1,6 +1,6 @@
 **MANDATORY: PR needs manual test run output**
 
-*Manual Test Run Output:*
+**Manual Test Run Output:**
 Please specify the release version, instance size and type, and OS type
 
 *Description:*
