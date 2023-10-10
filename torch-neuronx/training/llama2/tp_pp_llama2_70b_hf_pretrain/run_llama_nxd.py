@@ -253,7 +253,7 @@ def train_llama(args):
     print("Creating sample dataloader finised")
 
 
-    total_steps = 0
+    total_steps = 0 if user_content is None else user_content["total_steps"]
     should_print = (
         model.pipeline_parallel_rank == args.pipeline_parallel_size - 1 and dp_rank == 0 and tp_rank == 0
     )
