@@ -16,6 +16,7 @@
 # limitations under the License.
 
 import os
+import math
 import torch
 import sys
 import time
@@ -142,7 +143,7 @@ class Throughput:
         self, batch_size, world_size, grad_accum_usteps, moving_avg_window_size=10, logging_interval=1
     ):
         self.seqs_per_iteration = batch_size * world_size * grad_accum_usteps*logging_interval
-        self.moving_avg_window_size = moving_avg_window_size // logging_interval
+        self.moving_avg_window_size = math.ceil(moving_avg_window_size/logging_interval)
         self.moving_avg_window = queue.Queue()
         self.window_time = 0
         self.start_time = time.time()

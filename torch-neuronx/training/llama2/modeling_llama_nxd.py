@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch LLaMA model."""
+import os
 import math
 from typing import List, Optional, Tuple, Union
 
@@ -169,6 +170,9 @@ class LlamaMLP(LlamaMLPHF):
             def activation_mlp(gate_proj, up_proj):
                 activation_output = self.act_fn(gate_proj)
                 return (activation_output * up_proj)
+            
+            # We checkpoint the MLP compute too, since we see extra data movement which is more
+            # expensive than the recompute in this case.
             if self.config.selective_checkpoint_enabled:
                 intermediate_states = torch.utils.checkpoint.checkpoint(activation_mlp, gate_proj, up_proj)
             else:
