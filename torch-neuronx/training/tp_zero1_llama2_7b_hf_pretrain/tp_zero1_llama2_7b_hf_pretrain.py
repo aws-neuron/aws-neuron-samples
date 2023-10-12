@@ -287,7 +287,7 @@ def get_dtype(model) -> str:
             return "torch.bfloat16"
         if "torch.double" in str(model.dtype):
             return "torch.float32"
-    return str(model.dtype)    
+    return str(model.dtype)
 
 def allreduce_sequence_parallel_gradients(optimizer):
     """ All-reduce layernorm parameters across model parallel nodes when sequence parallelism is used.
@@ -482,7 +482,7 @@ def train_llama(flags):
 
     if flags.resume_ckpt:
         state_dict = checkpointing.load(flags.output_dir, model)
-        optimizer.load_state_dict(state_dict["optimizer"])
+        optimizer.load_sharded_state_dict(flags.output_dir)
         global_step = state_dict["global_step"]
         epoch = state_dict["epoch"]
         scheduler_state_dict = state_dict["scheduler"]
