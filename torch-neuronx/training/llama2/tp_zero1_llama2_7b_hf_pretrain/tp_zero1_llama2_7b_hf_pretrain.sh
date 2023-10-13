@@ -5,7 +5,7 @@
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-export NEURON_CC_FLAGS="--model-type=transformer --enable-experimental-O1 --enable-saturate-infinity"
+export NEURON_CC_FLAGS="--model-type transformer --distribution-strategy=llm-training --cache_dir=~/neuron_compile_cache/"
 export NEURON_FUSE_SOFTMAX=1
 
 # Async Runtime
