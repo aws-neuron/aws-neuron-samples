@@ -209,8 +209,11 @@ def train_llama(args):
     if not config.selective_checkpoint_enabled:
         apply_checkpoint(model)
     model.move_model_to_device()
-    if args.save_load_xser>0 and args.loading_step != -1:
+
+    if args.loading_step != -1:
         load(f"{args.checkpoint_dir}/step{args.loading_step}/model", model_or_optimizer=model, model_key=None, load_xser=args.save_load_xser>0)
+    elif args.pretrained_weight_dir is not None:
+        load(args.pretrained_weight_dir, model_or_optimizer=model, model_key=None, load_xser=args.save_load_xser>0, strict=False)
 
     param_groups = get_param_groups_by_weight_decay(model)
     if args.use_zero1_optimizer > 0:
@@ -361,6 +364,7 @@ if __name__ == "__main__":
     parser.add_argument("--loading_step", type=int, default=-1, help="load from step, -1 means no load")
     parser.add_argument("--num_kept_checkpoint", type=int, default=-1, help="number of checkpoints kept, old checkpoint will get deleted")
     parser.add_argument("--save_load_xser", type=int, default=1, help="save/load with xla serialization")
+    parser.add_argument("--pretrained_weight_dir", type=str, default=None, help="Load dir of pretrained weight")
 
     # optimization
     opt_grp = parser.add_argument_group(title="optimization", description="arguments for optimization")
