@@ -9,4 +9,3 @@ datasets >= 1.8.0
 sentencepiece != 0.1.92
 h5py
 requests
-numpy==1.21.6
