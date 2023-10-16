@@ -282,7 +282,6 @@ def train_llama(args):
                 if torch.distributed.get_rank() == 0:
                     print(f"skipping batch {batch_idx}")
                 continue
-            print(f"3 going to rank {torch.distributed.get_rank()}")
             start = time.time()
             input_ids = batch["input_ids"]
             attention_mask = batch["attention_mask"]
