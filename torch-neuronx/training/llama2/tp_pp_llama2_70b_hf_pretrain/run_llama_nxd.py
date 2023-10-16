@@ -50,7 +50,7 @@ except ImportError:
 from modeling_llama_nxd import LlamaForCausalLM, LlamaRMSNorm, LlamaDecoderLayer
 from adamw_fp32_optim_params import AdamW_FP32OptimParams
 from activation_checkpoint import apply_checkpoint
-from training_utils import get_param_groups_by_weight_decay, get_learning_rate_scheduler, create_llama_pretraining_dataset
+from training_utils import get_param_groups_by_weight_decay, get_learning_rate_scheduler, create_llama_pretraining_dataset， create_partition
 
 
 def allreduce_sequence_parallel_gradients(optimizer):
@@ -73,20 +73,7 @@ def allreduce_sequence_parallel_gradients(optimizer):
         # sum v.s. average: sum
         reduce_from_tensor_model_parallel_region(grad)
 
-def create_partition(config, args):
-    """
-    Evenly split the transformer layers between the PP ranks
-    """
-    assert config.num_hidden_layers % args.pipeline_parallel_size == 0
-    num_layer_per_partition = config.num_hidden_layers  // args.pipeline_parallel_size
-    pipeline_cuts = []
-    current_cut = num_layer_per_partition - 1
-    for i in range(args.pipeline_parallel_size-1):
-        pipeline_cuts.append(f"model.layers.{current_cut}")
-        current_cut += num_layer_per_partition
-    if torch.distributed.get_rank() == 0:
-        print(f"pipeline_cuts {pipeline_cuts}")
-    return pipeline_cuts
+
 
 def save_checkpoint(args, model, optimizer, lr_scheduler, batch_idx, total_steps):
     """
@@ -192,7 +179,9 @@ def train_llama(args):
     if dist.get_rank() == 0:
         print(f"# total parameters: {num_params}")
         print(f"model config {config}")
-    pipeline_cuts = create_partition(config, args)
+    pipeline_cuts = create_partition(config.num_hidden_layers, args.pipeline_parallel_size)
+    if torch.distributed.get_rank() == 0:
+        print(f"pipeline_cuts {pipeline_cuts}")
     model = NxDPPModel(
         model,
         transformer_layer_cls=LlamaDecoderLayer,
