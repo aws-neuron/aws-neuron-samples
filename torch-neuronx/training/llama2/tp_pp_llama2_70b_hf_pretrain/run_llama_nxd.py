@@ -50,7 +50,7 @@ except ImportError:
 from modeling_llama_nxd import LlamaForCausalLM, LlamaRMSNorm, LlamaDecoderLayer
 from adamw_fp32_optim_params import AdamW_FP32OptimParams
 from activation_checkpoint import apply_checkpoint
-from training_utils import get_param_groups_by_weight_decay, get_learning_rate_scheduler, create_llama_pretraining_dataset
+from training_utils import get_param_groups_by_weight_decay, get_learning_rate_scheduler, create_llama_pretraining_dataset， create_partition
 
 
 def allreduce_sequence_parallel_gradients(optimizer):
@@ -73,20 +73,7 @@ def allreduce_sequence_parallel_gradients(optimizer):
         # sum v.s. average: sum
         reduce_from_tensor_model_parallel_region(grad)
 
-def create_partition(config, args):
-    """
-    Evenly split the transformer layers between the PP ranks
-    """
-    assert config.num_hidden_layers % args.pipeline_parallel_size == 0
-    num_layer_per_partition = config.num_hidden_layers  // args.pipeline_parallel_size
-    pipeline_cuts = []
-    current_cut = num_layer_per_partition - 1
-    for i in range(args.pipeline_parallel_size-1):
-        pipeline_cuts.append(f"model.layers.{current_cut}")
-        current_cut += num_layer_per_partition
-    if torch.distributed.get_rank() == 0:
-        print(f"pipeline_cuts {pipeline_cuts}")
-    return pipeline_cuts
+
 
 def save_checkpoint(args, model, optimizer, lr_scheduler, batch_idx, total_steps):
     """
@@ -192,7 +179,9 @@ def train_llama(args):
     if dist.get_rank() == 0:
         print(f"# total parameters: {num_params}")
         print(f"model config {config}")
-    pipeline_cuts = create_partition(config, args)
+    pipeline_cuts = create_partition(config.num_hidden_layers, args.pipeline_parallel_size)
+    if torch.distributed.get_rank() == 0:
+        print(f"pipeline_cuts {pipeline_cuts}")
     model = NxDPPModel(
         model,
         transformer_layer_cls=LlamaDecoderLayer,
@@ -209,8 +198,11 @@ def train_llama(args):
     if not config.selective_checkpoint_enabled:
         apply_checkpoint(model)
     model.move_model_to_device()
-    if args.save_load_xser>0 and args.loading_step != -1:
+
+    if args.loading_step != -1:
         load(f"{args.checkpoint_dir}/step{args.loading_step}/model", model_or_optimizer=model, model_key=None, load_xser=args.save_load_xser>0)
+    elif args.pretrained_weight_dir is not None:
+        load(args.pretrained_weight_dir, model_or_optimizer=model, model_key=None, load_xser=args.save_load_xser>0, strict=False)
 
     param_groups = get_param_groups_by_weight_decay(model)
     if args.use_zero1_optimizer > 0:
@@ -360,6 +352,7 @@ if __name__ == "__main__":
     parser.add_argument("--loading_step", type=int, default=-1, help="load from step, -1 means no load")
     parser.add_argument("--num_kept_checkpoint", type=int, default=-1, help="number of checkpoints kept, old checkpoint will get deleted")
     parser.add_argument("--save_load_xser", type=int, default=1, help="save/load with xla serialization")
+    parser.add_argument("--pretrained_weight_dir", type=str, default=None, help="Load dir of pretrained weight")
 
     # optimization
     opt_grp = parser.add_argument_group(title="optimization", description="arguments for optimization")

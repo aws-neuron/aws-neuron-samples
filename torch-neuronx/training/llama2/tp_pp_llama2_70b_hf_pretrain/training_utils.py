@@ -1,9 +1,14 @@
 from transformers import default_data_collator
 from torch.utils.data.dataloader import DataLoader
 import datasets
+
 from torch.utils.data import DistributedSampler
 from transformers import set_seed
-from lr import CosineAnnealing
+
+try:
+    from lr import CosineAnnealing
+except ImportError:
+    CosineAnnealing=None
 
 def get_learning_rate_scheduler(optimizer, args, last_epoch=-1):
     lr_scheduler = CosineAnnealing(optimizer, max_steps=args.max_steps, min_lr=args.min_lr, warmup_steps=args.warmup_steps, constant_steps=args.constant_steps, last_epoch=last_epoch)
@@ -64,3 +69,16 @@ def create_llama_pretraining_dataset(
         pin_memory=True,
     )
     return train_dataloader
+
+def create_partition(num_hidden_layers, pipeline_parallel_size):
+    """
+    Evenly split the transformer layers between the PP ranks
+    """
+    assert num_hidden_layers % pipeline_parallel_size == 0
+    num_layer_per_partition = num_hidden_layers  // pipeline_parallel_size
+    pipeline_cuts = []
+    current_cut = num_layer_per_partition - 1
+    for i in range(pipeline_parallel_size-1):
+        pipeline_cuts.append(f"model.layers.{current_cut}")
+        current_cut += num_layer_per_partition
+    return pipeline_cuts
