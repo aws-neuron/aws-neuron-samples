@@ -3,7 +3,7 @@
 #############################################
 # User defined parameters and env vars
 
-export NEURON_CC_FLAGS="--model-type=transformer --enable-experimental-O1 --enable-saturate-infinity"
+export NEURON_CC_FLAGS="--model-type=transformer -O1 --enable-saturate-infinity --cache_dir=~/neuron_compile_cache/"
 export NEURON_FUSE_SOFTMAX=1
 
 export XLA_DOWNCAST_BF16=1
