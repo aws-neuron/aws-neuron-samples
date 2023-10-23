@@ -8,12 +8,11 @@ export FI_EFA_USE_DEVICE_RDMA=1
 export FI_PROVIDER=efa
 export FI_EFA_FORK_SAFE=1
 
-export NEURON_RT_NUM_CORES=32
 export NEURON_FUSE_SOFTMAX=1
 export NEURON_RT_ASYNC_EXEC_MAX_INFLIGHT_REQUESTS=5
 export MALLOC_ARENA_MAX=128
 export XLA_DOWNCAST_BF16=1
-export NEURON_CC_FLAGS="--model-type=transformer --distribution-strategy=nemo --enable-saturate-infinity"
+export NEURON_CC_FLAGS="--model-type=transformer --distribution-strategy=llm-training --enable-saturate-infinity --cache_dir=/home/ubuntu/cache_dir_neuron/"
 
 PROCESSES_PER_NODE=32
 WORLD_SIZE=1
@@ -36,7 +35,6 @@ if [ -v SLURM_NTASKS ]; then
     
     MASTER_ADDR=${HOSTS[0]}
     MASTER_PORT=44000
-    NUM_NEURONCORES=$NEURON_RT_NUM_CORES
     DISTRIBUTED_ARGS="--nproc_per_node $PROCESSES_PER_NODE --nnodes $NTASKS --node_rank $NODEID --master_addr $MASTER_ADDR --master_port $MASTER_PORT"
 else
     DISTRIBUTED_ARGS="--nproc_per_node $PROCESSES_PER_NODE"
@@ -55,7 +53,7 @@ PP_DEGREE=8
 # Tensor parallel degree
 TP_DEGREE=8
 # Data paralell size
-DP=$(($NEURON_RT_NUM_CORES * $WORLD_SIZE / $TP_DEGREE / $PP_DEGREE))
+DP=$(($PROCESSES_PER_NODE * $WORLD_SIZE / $TP_DEGREE / $PP_DEGREE))
 # Batch size per model replica
 BS=$(($GBS / $DP))
 # Number microbatches for pipeline execution
@@ -90,4 +88,5 @@ torchrun $DISTRIBUTED_ARGS run_llama_nxd.py \
     --weight_decay 0.1 \
     --warmup_steps 2000 \
     --constant_steps 0 \
+    --use_zero1_optimizer 1 \
     --tb_dir $tb_dir |& tee $LOG_PATH/log
