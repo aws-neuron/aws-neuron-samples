@@ -15,13 +15,15 @@ def merge_llama_tp_checkpoints(args):
                 partial_state = load_partial_xser(args, tp_rank, pp_rank)
             else:
                 partial_state = load_partial_no_xser(args, tp_rank, pp_rank)
+            if args.model_key is not None and args.model_key in partial_state:
+                partial_state = partial_state[args.model_key]
             for n, param in partial_state.items():
                 if "embed_tokens" in n or "q_proj" in n or "k_proj" in n or "v_proj" in n or "o_proj" in n or "down_proj" in n or "lm_head" in n:
                     partition_dim = 1 if ("o_proj" in n or "down_proj" in n) else 0
                     if n not in full_model:
                         full_model[n] = []
                     full_model[n].append(param)
-                    if tp_rank == (args.tp_size -1):
+                    if tp_rank == (args.tp_size - 1):
                         full_weight = torch.cat(full_model[n], dim=partition_dim)
                         full_model[n] = full_weight
                 elif "gate_up_proj" in n:
@@ -37,7 +39,7 @@ def merge_llama_tp_checkpoints(args):
                         full_model[up_proj_name] = []
                     full_model[gate_proj_name].append(gate_proj_weight)
                     full_model[up_proj_name].append(up_proj_weight)
-                    if tp_rank == (args.tp_size -1):
+                    if tp_rank == (args.tp_size - 1):
                         full_gate_proj_weight = torch.cat(full_model[gate_proj_name], dim=partition_dim)
                         full_up_proj_weight = torch.cat(full_model[up_proj_name], dim=partition_dim)
                         full_model[gate_proj_name] = full_gate_proj_weight
@@ -175,6 +177,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_dir", type=str, required=True, help="Path to input model/weights")
     parser.add_argument("--output_dir", type=str, required=True, help="Path to save converted model/weights")
+    parser.add_argument("--model_key", type=str, default="model", help="Key of the model state dict in the checkpoint object")
     parser.add_argument("--tp_size", type=int, default=1, help="Tensor Parallel degree for the model")
     parser.add_argument("--pp_size", type=int, default=1, help="Pipeline Parallel degree for the model")
     parser.add_argument("--n_layers", type=int, default=0, help="Number of Layers")
