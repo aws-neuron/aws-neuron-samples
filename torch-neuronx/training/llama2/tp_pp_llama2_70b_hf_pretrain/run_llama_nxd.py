@@ -50,7 +50,7 @@ except ImportError:
 from modeling_llama_nxd import LlamaForCausalLM, LlamaRMSNorm, LlamaDecoderLayer
 from adamw_fp32_optim_params import AdamW_FP32OptimParams
 from activation_checkpoint import apply_checkpoint
-from training_utils import get_param_groups_by_weight_decay, get_learning_rate_scheduler, create_llama_pretraining_dataset， create_partition
+from training_utils import get_param_groups_by_weight_decay, get_learning_rate_scheduler, create_llama_pretraining_dataset, create_partition
 
 
 def allreduce_sequence_parallel_gradients(optimizer):
