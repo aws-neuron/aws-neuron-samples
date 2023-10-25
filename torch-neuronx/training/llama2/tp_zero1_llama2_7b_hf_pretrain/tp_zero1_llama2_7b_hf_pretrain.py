@@ -50,6 +50,7 @@ import requests
 from neuronx_distributed.parallel_layers import parallel_state, layers, grads, checkpointing
 from neuronx_distributed.utils.model_utils import move_model_to_device
 from neuronx_distributed.parallel_layers.grads import bucket_allreduce_gradients
+from neuronx_distributed.parallel_layers.utils import is_pjrt_device
 import datasets
 
 from neuronx_distributed.optimizer import NeuronZero1Optimizer
@@ -736,7 +737,11 @@ if __name__ == "__main__":
 
     # WORLD_SIZE is set by torchrun
     if os.environ.get("WORLD_SIZE"):
-        dist.init_process_group("xla")
+        if is_pjrt_device():
+            import torch_xla.experimental.pjrt_backend
+            dist.init_process_group("xla", init_method="pjrt://")
+        else:
+            dist.init_process_group("xla") 
         _mp_fn(0, args)
     else:
         xmp.spawn(_mp_fn, args=(args,))
