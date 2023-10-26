@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch LLaMA model."""
+import os
 import math
 from typing import List, Optional, Tuple, Union
 
@@ -166,7 +167,17 @@ class LlamaMLP(LlamaMLPHF):
             down_proj = sum(down_proj)
         else:
             gate_proj, up_proj = self.gate_up_proj(x).split(self.split_size, dim=2)
-            down_proj = self.down_proj(self.act_fn(gate_proj) * up_proj)
+            def activation_mlp(gate_proj, up_proj):
+                activation_output = self.act_fn(gate_proj)
+                return (activation_output * up_proj)
+            
+            # We checkpoint the MLP compute too, since we see extra data movement which is more
+            # expensive than the recompute in this case.
+            if self.config.selective_checkpoint_enabled:
+                intermediate_states = torch.utils.checkpoint.checkpoint(activation_mlp, gate_proj, up_proj)
+            else:
+                intermediate_states = (self.act_fn(gate_proj) * up_proj)
+            down_proj = self.down_proj(intermediate_states)
 
         return down_proj
 
@@ -319,7 +330,7 @@ class LlamaAttention(LlamaAttentionHF):
             causal_mask = torch.triu(torch.ones((1, 1, q_len, kv_seq_len), device='xla'), diagonal=1).bool()
             attn_weights = attn_weights.masked_fill_(causal_mask, -10000.0)
 
-            attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.double).to(query_states.dtype)
+            attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
 
             attn_output = torch.matmul(attn_weights, value_states)
             return attn_output

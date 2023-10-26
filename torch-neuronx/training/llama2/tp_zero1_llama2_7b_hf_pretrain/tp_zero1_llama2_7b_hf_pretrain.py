@@ -16,6 +16,7 @@
 # limitations under the License.
 
 import os
+import math
 import torch
 import sys
 import time
@@ -49,6 +50,7 @@ import requests
 from neuronx_distributed.parallel_layers import parallel_state, layers, grads, checkpointing
 from neuronx_distributed.utils.model_utils import move_model_to_device
 from neuronx_distributed.parallel_layers.grads import bucket_allreduce_gradients
+from neuronx_distributed.parallel_layers.utils import is_pjrt_device
 import datasets
 
 from neuronx_distributed.optimizer import NeuronZero1Optimizer
@@ -139,10 +141,10 @@ class TrainingMetrics:
 
 class Throughput:
     def __init__(
-        self, batch_size, world_size, grad_accum_usteps, moving_avg_window_size=10
+        self, batch_size, world_size, grad_accum_usteps, moving_avg_window_size=10, logging_interval=1
     ):
-        self.seqs_per_iteration = batch_size * world_size * grad_accum_usteps
-        self.moving_avg_window_size = moving_avg_window_size
+        self.seqs_per_iteration = batch_size * world_size * grad_accum_usteps*logging_interval
+        self.moving_avg_window_size = math.ceil(moving_avg_window_size/logging_interval)
         self.moving_avg_window = queue.Queue()
         self.window_time = 0
         self.start_time = time.time()
@@ -367,7 +369,7 @@ def train_llama(flags):
             logger = Logger(flags, world_size, model_dtype)
         metric_writer = TrainingMetrics(flags.metrics_file)
         throughput = Throughput(
-            flags.batch_size, world_size, flags.grad_accum_usteps
+            flags.batch_size, world_size, flags.grad_accum_usteps, logging_interval=args.logging_interval
         )
         print("--------TRAINING CONFIG----------")
         print(flags)
@@ -435,7 +437,7 @@ def train_llama(flags):
                         model.parameters(), max_grad_norm
                     )  # Gradient clipping is not in AdamW anymore
                 optimizer.step()
-
+                total_norm_detach = 0.0
                 with torch.no_grad():
                     total_norm = torch.zeros(1, device=device)
                     if flags.print_grad_norm and is_root:
@@ -443,6 +445,7 @@ def train_llama(flags):
                             param_norm_sq = torch.square(p.grad).sum()
                             total_norm += param_norm_sq
                         total_norm = torch.sqrt(total_norm)
+                        total_norm_detach = total_norm.detach()
 
                 optimizer.zero_grad()
                 scheduler.step()
@@ -463,9 +466,10 @@ def train_llama(flags):
                             total_norm_cpu,
                         )
 
-                xm.add_step_closure(
-                    _print_logs, (running_loss_reduced_detached, total_norm.detach())
-                )
+                if global_step % flags.logging_interval == 0:
+                    xm.add_step_closure(
+                        _print_logs, (running_loss_reduced_detached, total_norm_detach)
+                    )
                 if global_step >= flags.steps_this_run:
                     # NOTE: Prevent runtime "Call to recv failed : Broken pipe" issue
                     xm.mark_step()
@@ -712,6 +716,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Enable selective checkpoint",
     )
+    parser.add_argument(
+        "--logging_interval",
+        default=1,
+        type=int,
+        help="Enable selective checkpoint",
+    )
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -727,7 +737,11 @@ if __name__ == "__main__":
 
     # WORLD_SIZE is set by torchrun
     if os.environ.get("WORLD_SIZE"):
-        dist.init_process_group("xla")
+        if is_pjrt_device():
+            import torch_xla.experimental.pjrt_backend
+            dist.init_process_group("xla", init_method="pjrt://")
+        else:
+            dist.init_process_group("xla") 
         _mp_fn(0, args)
     else:
         xmp.spawn(_mp_fn, args=(args,))

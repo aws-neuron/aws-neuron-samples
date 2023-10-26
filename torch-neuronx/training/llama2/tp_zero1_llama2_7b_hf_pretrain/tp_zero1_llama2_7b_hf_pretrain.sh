@@ -5,7 +5,7 @@
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-export NEURON_CC_FLAGS="--model-type=transformer --enable-experimental-O1 --enable-saturate-infinity"
+export NEURON_CC_FLAGS="--model-type transformer --distribution-strategy=llm-training --cache_dir=~/neuron_compile_cache/"
 export NEURON_FUSE_SOFTMAX=1
 
 # Async Runtime
@@ -21,15 +21,15 @@ USE_MIX_PRECISION=1
 # 0: use pure DP; 1: use ZeRO-1
 USE_ZERO_1=1
 # global batch size
-GBS=256
+GBS=1024
 # micro batch size
 MBS=1
 # number of steps to run
 TOTAL_STEPS=10000
 # warmup steps
-WARMUP_STEPS=2000
+WARMUP_STEPS=100
 # learning rate
-LR=2.0e-5
+LR=3.0e-4
 # model path
 MODEL_PATH=$SCRIPT_DIR
 # data path
@@ -124,4 +124,5 @@ torchrun $DISTRIBUTED_ARGS \
     --seq_len $SEQ_LEN \
     --sequence_parallel_enabled \
     --selective_checkpoint_enabled \
+    --logging_interval 10 \
     $EXTRA_ARGS |& tee $OUTPUT_LOG
