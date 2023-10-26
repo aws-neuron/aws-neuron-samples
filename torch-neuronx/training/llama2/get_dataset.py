@@ -6,7 +6,7 @@ import os
 dataset_name = "wikicorpus"
 dataset_config_name = "raw_en"
 save_path = "~/examples_datasets/wikicorpus_llama2_7B_tokenized_4k"
-tokenizer_path = "~/examples/tp_zero1_llama2_7b_hf_pretrain"
+tokenizer_path = os.getcwd()
 
 save_path = os.path.expanduser(save_path)
 tokenizer_path = os.path.expanduser(tokenizer_path)

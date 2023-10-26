@@ -23,6 +23,7 @@
     "use_cache": true,
     "vocab_size": 32000,
     "sequence_parallel_enabled": false,
-    "selective_checkpoint_enabled": false
+    "selective_checkpoint_enabled": false,
+    "move_model_to_device":true
   }
   
