@@ -389,7 +389,7 @@ def get_and_move_model_sequential(device, num_workers_per_step=11):
         if local_rank // num_workers_per_step == worker:
             model = get_model()
             move_model_to_device(model, device)
-        neuronx_dist_utils.add_barrier("get_and_move_model_sequential" + str(worker))
+        xm.rendezvous("get_and_move_model_sequential" + str(worker))
     return model
 
 def get_dtype(model) -> str:
