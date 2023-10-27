@@ -285,7 +285,7 @@ def get_model(flags):
     if flags.selective_checkpoint_enabled:
         config.selective_checkpoint_enabled = True
     xm.master_print(config)
-    model = LlamaForCausalLMNxD(config)
+    model = LlamaForCausalLM(config)
     xm.master_print(model)
     return model
 
