@@ -55,7 +55,7 @@ import datasets
 
 from neuronx_distributed.optimizer import NeuronZero1Optimizer
 from adamw_fp32_optim_params import AdamW_FP32OptimParams
-from modeling_llama2_nxd import LlamaForCausalLMNxD
+from modeling_llama_nxd import LlamaForCausalLM
 
 # For PT autocast.
 torch.cuda.is_bf16_supported = lambda: True
