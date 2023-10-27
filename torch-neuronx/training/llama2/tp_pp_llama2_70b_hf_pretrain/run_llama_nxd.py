@@ -42,6 +42,8 @@ from neuronx_distributed.parallel_layers.checkpointing import save, load
 from neuronx_distributed.utils import model_utils
 from transformers import LlamaConfig
 import transformers.modeling_utils as modeling_utils
+# For delayed parameter inititalization
+# Check https://pytorch.org/torchdistx/latest/deferred_init.html
 try:
     from torchdistx import deferred_init
 except ImportError:
@@ -82,8 +84,10 @@ def save_checkpoint(args, model, optimizer, lr_scheduler, batch_idx, total_steps
     ckpt_start = time.time()
     base_dir = f"{args.checkpoint_dir}/step{total_steps}"
     local_state_dict = model.local_state_dict()
+    # save model states to disk
     save(local_state_dict, f"{base_dir}/model", save_xser=args.save_load_xser>0)
     local_state_dict = optimizer.state_dict()
+    # save optimizer states to disk
     save(local_state_dict, f"{base_dir}/optimizer", save_xser=args.save_load_xser>0)
     user_content = {"total_steps": total_steps, "lr_scheduler": lr_scheduler.state_dict(), "batch_idx": batch_idx, "cli_args": args.__dict__}
     ckpt_end = time.time()
@@ -126,6 +130,7 @@ def train_llama(args):
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     random.seed(args.seed)
+    # Initialize model parallelism groups
     initialize_model_parallel(
         pipeline_model_parallel_size=args.pipeline_parallel_size,
         tensor_model_parallel_size=args.tensor_parallel_size,
@@ -133,11 +138,13 @@ def train_llama(args):
     dp_rank = get_data_parallel_rank()
     dp_size = get_data_parallel_size()
     tp_rank = get_tensor_model_parallel_rank()
+    # load the config file if resume from checkpoint
     if args.loading_step != -1:
         user_content = torch.load(f"{args.checkpoint_dir}/step{args.loading_step}/user_content.pt")
     else:
         user_content = None
 
+    # Set up Llama config
     config = LlamaConfig.from_pretrained(args.training_config)
     config.use_cache = False
     config.return_dict = False
@@ -148,9 +155,17 @@ def train_llama(args):
         config.num_hidden_layers = args.num_layer
     if args.hidden_size != -1:
         config.hidden_size = args.hidden_size
+    
+    # Create model with different options
+    # Either deferred_init or meta device initialization will be required to avoid host OOM for 70B model
     if args.use_deferred_init > 0 and deferred_init is not None:
+        # Create model with PT's deferred initialization
+        # All tensors will be in fake tensor mode: https://pytorch.org/torchdistx/latest/fake_tensor.html
         model = deferred_init.deferred_init(LlamaForCausalLM, config)
     elif args.use_meta_device_init > 0:
+        # Create model on meta device
+        # Parameters will be meta tensors, so reinit will be required
+        # Buffers will be on CPU
         def init_weights(module):
             """
             Re-init weights after partition
@@ -174,14 +189,17 @@ def train_llama(args):
         with model_utils.init_on_device(device=torch.device("meta")):
             model = LlamaForCausalLM(config)
     else:
+        # Create model directly on host device
         model = LlamaForCausalLM(config)
     num_params = sum([np.prod(p.size()) for p in model.parameters()])
     if dist.get_rank() == 0:
         print(f"# total parameters: {num_params}")
         print(f"model config {config}")
+    # Create the PP partitions
     pipeline_cuts = create_partition(config.num_hidden_layers, args.pipeline_parallel_size)
     if torch.distributed.get_rank() == 0:
         print(f"pipeline_cuts {pipeline_cuts}")
+    # Create NxD PP model, tracing and partition happens internally
     model = NxDPPModel(
         model,
         transformer_layer_cls=LlamaDecoderLayer,
@@ -195,10 +213,14 @@ def train_llama(args):
         autowrap_modules=[mappings],
         use_zero1_optimizer=args.use_zero1_optimizer > 0,
     )
+    # Applying activation checkpoint for transformer layers
     if not config.selective_checkpoint_enabled:
         apply_checkpoint(model)
+    # Only move the local module to device
+    # If either meta device/deferred init is used, only local module will be materialized
     model.move_model_to_device()
 
+    # Load the model weight
     if args.loading_step != -1:
         load(f"{args.checkpoint_dir}/step{args.loading_step}/model", model_or_optimizer=model, model_key=None, load_xser=args.save_load_xser>0)
     elif args.pretrained_weight_dir is not None:
@@ -246,6 +268,8 @@ def train_llama(args):
 
 
     total_steps = 0 if user_content is None else user_content["total_steps"]
+    # Only print/logging on the last PP rank of the first PP group
+    # Since loss is only in the last PP rank
     should_print = (
         model.pipeline_parallel_rank == args.pipeline_parallel_size - 1 and dp_rank == 0 and tp_rank == 0
     )
@@ -278,7 +302,9 @@ def train_llama(args):
             input_ids = batch["input_ids"]
             attention_mask = batch["attention_mask"]
             labels = batch["labels"]
+            # Enavle auto-mix-precision if needed
             with torch.autocast(enabled=args.use_amp > 0, dtype=torch.bfloat16, device_type="cuda"):
+                # Calling model.run_train instead of model forward to use the PP runtime
                 loss = model.run_train(
                     input_ids=input_ids,
                     attention_mask=attention_mask,
@@ -290,6 +316,7 @@ def train_llama(args):
             if args.use_zero1_optimizer == 0:
                 global_norm = clip_grad_norm(model.parameters(), 1.0)
             else:
+                # Zero optimizer will take care of grad clipping
                 global_norm = None
             optimizer.step()
             optimizer.zero_grad()
@@ -376,6 +403,8 @@ if __name__ == "__main__":
     lr_grp.add_argument("--min_lr",type=float,default=None,help="Minumum value for learning rate. The scheduler" "clip values below this threshold.")
 
     args, _ = parser.parse_known_args()
+    # Workaround for NaNs seen with transformers version >= 4.21.0
+    # https://github.com/aws-neuron/aws-neuron-sdk/issues/593   
     if os.environ.get("XLA_USE_BF16") or os.environ.get("XLA_DOWNCAST_BF16") or args.use_amp > 0:
         modeling_utils.get_parameter_dtype = lambda x: torch.bfloat16
 
