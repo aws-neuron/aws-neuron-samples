@@ -52,8 +52,7 @@ if __name__ == '__main__':
         quotechar='"',
         quoting=csv.QUOTE_ALL,
         escapechar='\\',
-        encoding='utf-8',
-        error_bad_lines=False
+        encoding='utf-8'
     )
 
     train_dataset = Dataset.from_dict(train)

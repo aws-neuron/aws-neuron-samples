@@ -15,7 +15,17 @@ RANK_NODE=0
 MAX_STEPS=7032
 BATCH_SIZE=16
 GRAD_ACCUM_USTEPS=128 #keep the GBS=64k to benchmark over GPU
-NUM_NEURONCORES=32
+
+if [ -e /opt/aws/neuron/bin/neuron-ls ]; then
+    NUM_DEVICES=`/opt/aws/neuron/bin/neuron-ls -j | jq '. | length'`
+    NC_PER_DEVICE=`/opt/aws/neuron/bin/neuron-ls -j | jq '.[0].nc_count'`
+    let NUM_NEURONCORES=$NUM_DEVICES*$NC_PER_DEVICE
+    echo "Found $NUM_NEURONCORES NeuronCores"
+else
+    NUM_NEURONCORES=32
+    echo "neuron-ls not installed (aws-neuronx-tools); using default $NUM_NEURONCORES NeuronCores"
+fi
+
 DISTRIBUTED_ARGS="--nproc_per_node $NUM_NEURONCORES"
 OUTPUT_DIR=output
 OPT=LAMB
@@ -39,8 +49,10 @@ if [ ! -z "$SLURM_NTASKS" ]; then
     echo $DISTRIBUTED_ARGS
     OUTPUT_DIR=output_$SLURM_JOB_ID
     LOG_FILE=${LOG_FILE}_${RANK_NODE}_${WORLD_SIZE_JOB}
-    CACHE_DIR=$HOME/neuron_cache/bert/`hostname`
-    export NEURON_CC_FLAGS="--cache_dir=$CACHE_DIR"
+    if [ -z "$NEURON_COMPILE_CACHE_URL" ]; then
+        CACHE_DIR=$HOME/neuron_cache/bert/`hostname`
+        export NEURON_CC_FLAGS="--cache_dir=$CACHE_DIR"
+    fi
     export TRANSFORMERS_CACHE=$HOME/hf_cache/`hostname`/hub
     # HF ver > 4.22: Move cache ahead of time to prevent multiple workers moving at the same time
     python -c "import transformers.utils as utils; utils.move_cache()"
@@ -62,10 +74,10 @@ mkdir -p $OUTPUT_DIR
 if [ -z "$json" ]; then json="$OUTPUT_DIR/results.json" && rm -f $json; fi
 
 sudo sysctl -w net.ipv4.ip_local_reserved_ports=48620 || exit 1
-XLA_DOWNCAST_BF16=1 torchrun $DISTRIBUTED_ARGS dp_bert_large_hf_pretrain_hdf5.py --optimizer $OPT --lr 6e-3 --output_dir $OUTPUT_DIR --max_steps $MAX_STEPS --steps_this_run $steps_this_run --metrics_file $json --batch_size=$BATCH_SIZE --grad_accum_usteps=$GRAD_ACCUM_USTEPS |& tee $OUTPUT_DIR/$LOG_FILE &
-wait %1
+XLA_DOWNCAST_BF16=1 torchrun $DISTRIBUTED_ARGS dp_bert_large_hf_pretrain_hdf5.py --optimizer $OPT --lr 6e-3 --output_dir $OUTPUT_DIR --max_steps $MAX_STEPS --steps_this_run $steps_this_run --metrics_file $json --batch_size=$BATCH_SIZE --grad_accum_usteps=$GRAD_ACCUM_USTEPS |& tee $OUTPUT_DIR/$LOG_FILE
 
-ret_val=$?
+ret_val=${PIPESTATUS[0]}
+echo $ret_val
 if [ $ret_val -eq 0 ]; then
     success=1
 else

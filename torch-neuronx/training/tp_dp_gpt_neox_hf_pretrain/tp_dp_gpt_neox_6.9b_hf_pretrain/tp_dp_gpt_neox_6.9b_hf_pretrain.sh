@@ -3,7 +3,7 @@
 #############################################
 # User defined parameters and env vars
 
-export NEURON_CC_FLAGS="--model-type=transformer --enable-experimental-O1 --enable-saturate-infinity"
+export NEURON_CC_FLAGS="--model-type=transformer -O1 --enable-saturate-infinity --cache_dir=~/neuron_compile_cache/"
 export NEURON_FUSE_SOFTMAX=1
 
 export XLA_DOWNCAST_BF16=1
@@ -28,15 +28,15 @@ DATA_PATH="~/examples_datasets/wikicorpus_gpt_neox_tokenized_2k"
 
 #############################################
 
-export NEURON_NUM_DEVICES=32
+export NUM_NEURONCORES=32
 NODE_ID=0
 WORLD_SIZE=1
-DISTRIBUTED_ARGS="--nproc_per_node $NEURON_NUM_DEVICES"
+DISTRIBUTED_ARGS="--nproc_per_node $NUM_NEURONCORES"
 if [ ! -z "$SLURM_NTASKS" ]; then
     WORLD_SIZE=$SLURM_NTASKS
     NODE_ID=$SLURM_NODEID
     MASTER_ADDRESS=(`scontrol show hostnames $SLURM_JOB_NODELIST`)
-    DISTRIBUTED_ARGS="--nproc_per_node $NEURON_NUM_DEVICES --nnodes $WORLD_SIZE --node_rank $NODE_ID --master_addr $MASTER_ADDRESS --master_port 44000"
+    DISTRIBUTED_ARGS="--nproc_per_node $NUM_NEURONCORES --nnodes $WORLD_SIZE --node_rank $NODE_ID --master_addr $MASTER_ADDRESS --master_port 44000"
     if [ $NODE_ID -eq 0 ]; then
         echo "WORLD_SIZE=$WORLD_SIZE"
         echo "NODE_ID=$NODE_ID"
@@ -49,7 +49,7 @@ fi
 
 #############################################
 
-DP=$(($NEURON_NUM_DEVICES * $WORLD_SIZE / $TP_DEGREE))
+DP=$(($NUM_NEURONCORES * $WORLD_SIZE / $TP_DEGREE))
 ACC_STEPS=$(($GBS / $MBS / $DP))
 
 if [ ! -z "$NEURON_EXTRACT_GRAPHS_ONLY" ]; then
