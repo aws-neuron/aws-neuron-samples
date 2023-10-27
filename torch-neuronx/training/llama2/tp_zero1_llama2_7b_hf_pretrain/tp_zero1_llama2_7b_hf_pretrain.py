@@ -77,6 +77,13 @@ Metric = namedtuple("Metric", ["name", "value", "units", "additional_data"])
 
 
 class TrainingMetrics:
+    """
+    This class is used for logging metrics to a json file. One can provide a 
+    dictionary of metrics that needs to be stored, and it wpuld get 
+    written to the file.
+    Arguments:
+        json_file: File used for logging. If no file exists, new file would be created.
+    """
     def __init__(self, json_file):
         self.json_file = json_file
 
@@ -140,6 +147,10 @@ class TrainingMetrics:
 
 
 class Throughput:
+    """
+    Used to calculate the throughput over a moving window. It records the step time
+    between two calls and uses that time to calculate the throughput.
+    """
     def __init__(
         self, batch_size, world_size, grad_accum_usteps, moving_avg_window_size=10, logging_interval=1
     ):
@@ -311,6 +322,7 @@ def allreduce_sequence_parallel_gradients(optimizer):
         reduce_from_tensor_model_parallel_region(grad)
 
 def train_llama(flags):
+    # Initialize the model parallelism with the tp degree
     parallel_state.initialize_model_parallel(tensor_model_parallel_size=flags.tensor_parallel_size)
     world_size = parallel_state.get_data_parallel_size()
     is_root = xm.is_master_ordinal(local=False)
@@ -320,6 +332,8 @@ def train_llama(flags):
     device = xm.xla_device()
 
     model = get_model(flags)
+    # Moving the model to device using NxD's API. This takes care of preserving the 
+    # tp/sp attributes
     move_model_to_device(model, device)
     model.train()
 
@@ -419,6 +433,7 @@ def train_llama(flags):
                 xm.mark_step()
                 # loss averaging
                 running_loss_div = running_loss / world_size
+                # Collecting loss across all data-parallel ranks
                 running_loss_reduced = xm.all_reduce(
                     xm.REDUCE_SUM,
                     running_loss_div,
@@ -427,6 +442,8 @@ def train_llama(flags):
                 running_loss_reduced_detached = running_loss_reduced.detach()
                 running_loss.zero_()
 
+                # For sequence-parallel, we have to explicitly all-reduce the layernorm
+                # gradients.
                 allreduce_sequence_parallel_gradients(optimizer)
                 if not use_zero_1:
                     # all-reduce and then clip. Order matters.
@@ -467,6 +484,10 @@ def train_llama(flags):
                         )
 
                 if global_step % flags.logging_interval == 0:
+                    # Printing the loss inside the step closure. This won't block
+                    # the tracing for next step. Also, we are logging every N steps.
+                    # This is done to reduce the overhead of copying tensors to CPU.
+                    # Tensor copy is expensive since it prevents the next step to start.
                     xm.add_step_closure(
                         _print_logs, (running_loss_reduced_detached, total_norm_detach)
                     )
@@ -514,6 +535,9 @@ def train_llama(flags):
     train_dataloader = create_pretraining_dataset(
         flags.data_dir, mini_batch_size, worker_init
     )
+    # We wrap the dataloader with MpDeviceLoader. This dataloader should take
+    # care of copying the tensors to device and also inserting the mark_step at
+    # iteration end.
     train_device_loader = pl.MpDeviceLoader(train_dataloader, device)
 
     while True:
@@ -602,6 +626,10 @@ def train_llama(flags):
                "epoch": epoch,
                "scheduler": scheduler.state_dict()
             }
+            # Note: We are not saving the optimizer using the checkpoint.save API.
+            # This is because the Zero1 Optimizer is sharded across data-parallel ranks
+            # and hence all DP ranks need to save. checkpoint.save API only saves from 
+            # DP rank=0
             checkpointing.save(state_dict, flags.output_dir)
             optimizer.save_sharded_state_dict(flags.output_dir)
             return
