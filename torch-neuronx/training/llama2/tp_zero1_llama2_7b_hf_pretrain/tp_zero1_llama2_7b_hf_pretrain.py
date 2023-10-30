@@ -55,7 +55,7 @@ import datasets
 
 from neuronx_distributed.optimizer import NeuronZero1Optimizer
 from adamw_fp32_optim_params import AdamW_FP32OptimParams
-from modeling_llama2_nxd import LlamaForCausalLMNxD
+from modeling_llama_nxd import LlamaForCausalLM
 
 # For PT autocast.
 torch.cuda.is_bf16_supported = lambda: True
@@ -285,7 +285,7 @@ def get_model(flags):
     if flags.selective_checkpoint_enabled:
         config.selective_checkpoint_enabled = True
     xm.master_print(config)
-    model = LlamaForCausalLMNxD(config)
+    model = LlamaForCausalLM(config)
     xm.master_print(model)
     return model
 
