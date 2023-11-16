@@ -54,6 +54,13 @@ from adamw_fp32_optim_params import AdamW_FP32OptimParams
 from activation_checkpoint import apply_checkpoint
 from training_utils import get_param_groups_by_weight_decay, get_learning_rate_scheduler, create_llama_pretraining_dataset, create_partition
 
+try:
+    from neuronx_distributed import load_checkpoint as nxd_load_checkpoint
+    from neuronx_distributed import save_checkpoint as nxd_save_checkpoint
+    NXD_NATIVE_CHECKPOINTING_AVAILABLE=True
+except ImportError:
+    NXD_NATIVE_CHECKPOINTING_AVAILABLE=False
+
 
 def allreduce_sequence_parallel_gradients(optimizer):
     """ All-reduce layernorm parameters across model parallel nodes when sequence parallelism is used.
@@ -81,26 +88,68 @@ def save_checkpoint(args, model, optimizer, lr_scheduler, batch_idx, total_steps
     """
     Save model/optimizer checkpoint with script level configs
     """
-    ckpt_start = time.time()
-    base_dir = f"{args.checkpoint_dir}/step{total_steps}"
-    local_state_dict = model.local_state_dict()
-    # save model states to disk
-    save(local_state_dict, f"{base_dir}/model", save_xser=args.save_load_xser>0)
-    local_state_dict = optimizer.state_dict()
-    # save optimizer states to disk
-    save(local_state_dict, f"{base_dir}/optimizer", save_xser=args.save_load_xser>0)
-    user_content = {"total_steps": total_steps, "lr_scheduler": lr_scheduler.state_dict(), "batch_idx": batch_idx, "cli_args": args.__dict__}
-    ckpt_end = time.time()
-    if torch.distributed.get_rank() == 0:
-        torch.save(user_content, f"{base_dir}/user_content.pt")
-        print(f"step {total_steps} checkpoint saved to {base_dir}, total time {ckpt_end-ckpt_start}s")
-    # Delete older checkpoints
-    if args.num_kept_checkpoint > 0:
-        import os, shutil
-        ckpt_to_del = f"{args.checkpoint_dir}/step{total_steps-args.checkpoint_freq*args.num_kept_checkpoint}"
-        if dist.get_rank() == 0 and os.path.exists(ckpt_to_del):
-            print(f"deleting old checkpoint {ckpt_to_del}")
-            shutil.rmtree(ckpt_to_del)
+    if NXD_NATIVE_CHECKPOINTING_AVAILABLE:
+        nxd_save_checkpoint(
+            args.checkpoint_dir,
+            tag=f"step_{total_steps}",
+            model=model,
+            optimizer=optimizer,
+            scheduler=lr_scheduler,
+            user_content={"total_steps": total_steps, "batch_idx": batch_idx, "cli_args": args.__dict__},
+            use_xser=True,
+            num_kept_ckpts=args.num_kept_checkpoint,
+        )
+    else:
+        ckpt_start = time.time()
+        base_dir = f"{args.checkpoint_dir}/step{total_steps}"
+        local_state_dict = model.local_state_dict()
+        # save model states to disk
+        save(local_state_dict, f"{base_dir}/model", save_xser=args.save_load_xser>0)
+        local_state_dict = optimizer.state_dict()
+        # save optimizer states to disk
+        save(local_state_dict, f"{base_dir}/optimizer", save_xser=args.save_load_xser>0)
+        user_content = {"total_steps": total_steps, "lr_scheduler": lr_scheduler.state_dict(), "batch_idx": batch_idx, "cli_args": args.__dict__}
+        ckpt_end = time.time()
+        if torch.distributed.get_rank() == 0:
+            torch.save(user_content, f"{base_dir}/user_content.pt")
+            print(f"step {total_steps} checkpoint saved to {base_dir}, total time {ckpt_end-ckpt_start}s")
+        # Delete older checkpoints
+        if args.num_kept_checkpoint > 0:
+            import os, shutil
+            ckpt_to_del = f"{args.checkpoint_dir}/step{total_steps-args.checkpoint_freq*args.num_kept_checkpoint}"
+            if dist.get_rank() == 0 and os.path.exists(ckpt_to_del):
+                print(f"deleting old checkpoint {ckpt_to_del}")
+                shutil.rmtree(ckpt_to_del)
+
+
+def load_checkpoint(args, model, optimizer, lr_scheduler):
+    if NXD_NATIVE_CHECKPOINTING_AVAILABLE:
+        if args.loading_step == "latest_if_exists":
+            if not os.path.exists(os.path.join(args.checkpoint_dir, "newest")):
+                return None
+
+            tag = None
+        else:
+            tag = f"step_{args.loading_step}"
+        user_content = nxd_load_checkpoint(
+            args.checkpoint_dir,
+            tag=tag,
+            model=model,
+            optimizer=optimizer,
+            scheduler=lr_scheduler
+        )
+    else:
+        if args.loading_step == "latest_if_exists":
+            raise RuntimeError("Setting loading_step to latest_if_exists is only support for neuronx_distributed >= 0.6.0")
+
+        user_content = torch.load(f"{args.checkpoint_dir}/step{args.loading_step}/user_content.pt")
+        load(f"{args.checkpoint_dir}/step{args.loading_step}/model", model_or_optimizer=model, model_key=None, load_xser=args.save_load_xser>0)
+        load(f"{args.checkpoint_dir}/step{args.loading_step}/optimizer", model_or_optimizer=optimizer, model_key=None, load_xser=args.save_load_xser>0)
+        lr_scheduler_state = user_content["lr_scheduler"]
+        lr_scheduler.load_state_dict(lr_scheduler_state)
+
+    return user_content
+
 
 class Throughput:
     def __init__(
@@ -138,11 +187,6 @@ def train_llama(args):
     dp_rank = get_data_parallel_rank()
     dp_size = get_data_parallel_size()
     tp_rank = get_tensor_model_parallel_rank()
-    # load the config file if resume from checkpoint
-    if args.loading_step != -1:
-        user_content = torch.load(f"{args.checkpoint_dir}/step{args.loading_step}/user_content.pt")
-    else:
-        user_content = None
 
     # Set up Llama config
     config = LlamaConfig.from_pretrained(args.training_config)
@@ -220,11 +264,6 @@ def train_llama(args):
     # If either meta device/deferred init is used, only local module will be materialized
     model.move_model_to_device()
 
-    # Load the model weight
-    if args.loading_step != -1:
-        load(f"{args.checkpoint_dir}/step{args.loading_step}/model", model_or_optimizer=model, model_key=None, load_xser=args.save_load_xser>0)
-    elif args.pretrained_weight_dir is not None:
-        load(args.pretrained_weight_dir, model_or_optimizer=model, model_key=None, load_xser=args.save_load_xser>0, strict=False)
 
     param_groups = get_param_groups_by_weight_decay(model)
     if args.use_zero1_optimizer > 0:
@@ -250,13 +289,13 @@ def train_llama(args):
             param_groups, betas=(args.beta1, args.beta2), lr=args.lr, weight_decay=args.weight_decay
         )
 
-    if args.loading_step != -1:
-        load(f"{args.checkpoint_dir}/step{args.loading_step}/optimizer", model_or_optimizer=optimizer, model_key=None, load_xser=args.save_load_xser>0)
-
     lr_scheduler = get_learning_rate_scheduler(optimizer, args)
-    if args.loading_step != -1:
-        lr_scheduler_state = user_content["lr_scheduler"]
-        lr_scheduler.load_state_dict(lr_scheduler_state)
+
+    user_content = None
+    if args.loading_step != "-1":
+        user_content = load_checkpoint(args, model, optimizer, lr_scheduler)
+    elif args.pretrained_weight_dir is not None:
+        load(args.pretrained_weight_dir, model_or_optimizer=model, model_key=None, load_xser=args.save_load_xser>0, strict=False)
 
     train_dataloader = create_llama_pretraining_dataset(args.training_dir, args.train_batch_size, args.seed, dp_size, dp_rank)
     if user_content is not None and "batch_idx" in user_content:
@@ -376,7 +415,7 @@ if __name__ == "__main__":
     parser.add_argument("--max_steps", type=int, default=100, help="max steps")
     parser.add_argument("--checkpoint_freq", type=int, default=100000, help="save checkpoint freq")
     parser.add_argument("--checkpoint_dir", type=str, default=None)
-    parser.add_argument("--loading_step", type=int, default=-1, help="load from step, -1 means no load")
+    parser.add_argument("--loading_step", type=str, default="-1", help="load from step. options are: -1, which means no load; an integer step id; a string \"latest_if_exists\", which means load latest under the checkpoint dir, this option allow you to resume training using exact same command line arguments")
     parser.add_argument("--num_kept_checkpoint", type=int, default=-1, help="number of checkpoints kept, old checkpoint will get deleted")
     parser.add_argument("--save_load_xser", type=int, default=1, help="save/load with xla serialization")
     parser.add_argument("--pretrained_weight_dir", type=str, default=None, help="Load dir of pretrained weight")
