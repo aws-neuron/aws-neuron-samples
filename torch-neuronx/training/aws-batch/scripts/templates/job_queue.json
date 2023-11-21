@@ -1,0 +1,12 @@
+{
+   "computeEnvironmentOrder" : [
+      {
+         "computeEnvironment" : "aws-batch-compute-environment",
+         "order" : 1
+      }
+   ],
+   "jobQueueName" : "aws-batch-job-queue",
+   "priority" : 10,
+   "state" : "ENABLED"
+}
+
