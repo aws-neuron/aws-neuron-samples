@@ -1,0 +1,4 @@
+datasets >= 1.8.0
+evaluate
+transformers==4.27.3
+
