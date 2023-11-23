@@ -2,6 +2,7 @@ from datasets import load_dataset
 from transformers import AutoTokenizer
 from itertools import chain
 import os
+import multiprocessing
 
 dataset_name = "wikicorpus"
 dataset_config_name = "raw_en"
@@ -57,11 +58,12 @@ lm_datasets = tokenized_datasets.map(
     group_texts,
     batched=True,
     load_from_cache_file=True,
+    num_proc=max(multiprocessing.cpu_count(), 1),
     desc=f"Grouping texts in chunks of {block_size}",
 )
 
 train_dataset = lm_datasets["train"]
 print(len(train_dataset))
 
-train_dataset.save_to_disk(save_path)
+train_dataset.save_to_disk(save_path, num_proc=max(multiprocessing.cpu_count(), 1))
 
