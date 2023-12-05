@@ -1,0 +1,36 @@
+name: Aggregate PRs into Staging Branch for Automated Testing
+
+on: 
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+    branches:
+      - master
+
+jobs:
+  merge-to-target:
+    if: github.event.pull_request.state == 'open' && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+
+    - name: Configure Git
+      run: |
+        git config user.name "GitHub Actions"
+        git config user.email "actions@github.com"
+
+    - name: Merge PR into Testing Branch
+      run: |
+        git fetch origin
+        git checkout -b target-branch origin/testing
+        git merge ${{ github.event.pull_request.head.sha }} --no-ff --no-commit
+        git commit -m "Merged PR #${{ github.event.pull_request.number }}"
+        git push origin testing
+
+    - name: Cleanup if PR Closed
+      if: github.event.action == 'closed'
+      run: |
+        # Add commands to reset or clean up target branch
+        # Example: git reset --hard origin/master
