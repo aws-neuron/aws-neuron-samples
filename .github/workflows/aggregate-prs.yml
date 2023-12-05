@@ -24,7 +24,7 @@ jobs:
     - name: Merge PR into Testing Branch
       run: |
         git fetch origin
-        git checkout -b target-branch origin/testing
+        git checkout -b testing origin/testing
         git merge ${{ github.event.pull_request.head.sha }} --no-ff --no-commit
         git commit -m "Merged PR #${{ github.event.pull_request.number }}"
         git push origin testing
