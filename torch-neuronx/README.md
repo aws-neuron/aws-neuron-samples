@@ -6,8 +6,6 @@ For additional information on these training scripts, please refer to the tutori
 
 ## Training
 
-[Deprecation] Please note the following samples will be moved to [NeuronX Distributed Repository](https://github.com/aws-neuron/neuronx-distributed).
-
 The following samples are available for training:
 
 | Name                                                        | Description                                                                                                                             | Training Parallelism |
@@ -22,8 +20,10 @@ The following samples are available for training:
 | [hf_bert_jp](training/hf_bert_jp)                           | Fine-tuning & Deployment Hugging Face BERT Japanese model                                                                               | DataParallel |
 | [hf_sentiment_analysis](training/hf_sentiment_analysis)     | Examples of training Hugging Face bert-base-cased model for a text classification task with Trn1 Single Neuron and Distributed Training | DataParallel |
 | [customop_mlp](training/customop_mlp)     | Examples of training a multilayer perceptron model with a custom Relu operator on a single Trn1 | DataParallel |
-| [tp_dp_gpt_neox_20b_hf_pretrain](training/tp_dp_gpt_neox_hf_pretrain/tp_dp_gpt_neox_20b_hf_pretrain)     | Training GPT-NEOX 20B model using neuronx-distributed | Tensor Parallel & DataParallel |
-| [tp_dp_gpt_neox_6.9b_hf_pretrain](training/tp_dp_gpt_neox_hf_pretrain/tp_dp_gpt_neox_6.9b_hf_pretrain)     | Training GPT-NEOX 6.9B model using neuronx-distributed | Tensor Parallel & DataParallel |
+| [tp_dp_gpt_neox_20b_hf_pretrain](training/tp_dp_gpt_neox_hf_pretrain/tp_dp_gpt_neox_20b_hf_pretrain) [Deprecated]    | [Deprecation] Please note the following sample will be moved to [NeuronX Distributed Repository](https://github.com/aws-neuron/neuronx-distributed).
+Training GPT-NEOX 20B model using neuronx-distributed | Tensor Parallel & DataParallel |
+| [tp_dp_gpt_neox_6.9b_hf_pretrain](training/tp_dp_gpt_neox_hf_pretrain/tp_dp_gpt_neox_6.9b_hf_pretrain) [Deprecated]    | [Deprecation] Please note the following sample will be moved to [NeuronX Distributed Repository](https://github.com/aws-neuron/neuronx-distributed).
+Training GPT-NEOX 6.9B model using neuronx-distributed | Tensor Parallel & DataParallel |
 
 
 ## Inference
