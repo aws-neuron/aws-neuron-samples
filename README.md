@@ -11,7 +11,7 @@ Samples are organized by use case (training, inference) and deep learning framew
 
 | Framework | Description | Instance Type |
 | --- | --- | --- |
-| [PyTorch Neuron (torch-neuronx)](torch-neuronx/README.md#training) | Sample training scripts for training various PyTorch models on AWS Trainium | Trn1, Trn1n & Inf2 |
+| [PyTorch NeuronX (torch-neuronx)](torch-neuronx/README.md#training) | Sample training scripts for training various PyTorch models on AWS Trainium | Trn1, Trn1n & Inf2 |
 
 | Usage | Description | Instance Type |
 | --- | --- | --- |
@@ -25,8 +25,8 @@ Samples are organized by use case (training, inference) and deep learning framew
 
 | Framework | Description | Instance Type |
 | --- | --- | --- |
-| [PyTorch Neuron (torch-neuronx)](torch-neuronx/README.md#inference) | Sample Jupyter notebooks demonstrating model compilation and inference for various PyTorch models on AWS Inferentia2 and Trainium | Inf2 & Trn1 |
-| [PyTorch Neuron (transformers-neuronx)](torch-neuronx/transformers-neuronx) | Sample Jupyter Notebooks demonstrating tensor parallel inference for various PyTorch large language models (LLMs) on AWS Inferentia2 and Trainium | Inf2 & Trn1 |
+| [PyTorch NeuronX (torch-neuronx)](torch-neuronx/README.md#inference) | Sample Jupyter notebooks demonstrating model compilation and inference for various PyTorch models on AWS Inferentia2 and Trainium | Inf2 & Trn1 |
+| [PyTorch NeuronX (transformers-neuronx)](torch-neuronx/transformers-neuronx) | Sample Jupyter Notebooks demonstrating tensor parallel inference for various PyTorch large language models (LLMs) on AWS Inferentia2 and Trainium | Inf2 & Trn1 |
 | [PyTorch Neuron (torch-neuron)](torch-neuron) | Sample Jupyter notebooks demonstrating model compilation and inference for various PyTorch models on AWS Inferentia | Inf1 |
 | [TensorFlow Neuron (tensorflow-neuron)](tensorflow-neuron) | Sample Jupyter notebooks demonstrating model compilation and inference for various TensorFlow models on AWS Inferentia | Inf1 |
 
