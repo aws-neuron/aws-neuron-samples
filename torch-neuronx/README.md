@@ -22,7 +22,8 @@ The following samples are available for training:
 | [customop_mlp](training/customop_mlp)     | Examples of training a multilayer perceptron model with a custom Relu operator on a single Trn1 | DataParallel |
 | [tp_dp_gpt_neox_20b_hf_pretrain](training/tp_dp_gpt_neox_hf_pretrain/tp_dp_gpt_neox_20b_hf_pretrain) [Deprecated]    | [Deprecation] Please note the following sample will be moved to [NeuronX Distributed Repository](https://github.com/aws-neuron/neuronx-distributed). Training GPT-NEOX 20B model using neuronx-distributed | Tensor Parallel & DataParallel |
 | [tp_dp_gpt_neox_6.9b_hf_pretrain](training/tp_dp_gpt_neox_hf_pretrain/tp_dp_gpt_neox_6.9b_hf_pretrain) [Deprecated]    | [Deprecation] Please note the following sample will be moved to [NeuronX Distributed Repository](https://github.com/aws-neuron/neuronx-distributed). Training GPT-NEOX 6.9B model using neuronx-distributed | Tensor Parallel & DataParallel |
-
+| [tp_zero1_llama2_7b_hf_pretrain](training/llama2/tp_zero1_llama2_7b_hf_pretrain) [Deprecated] | [Deprecation] Please note the following sample will be moved to [NeuronX Distributed Repository](https://github.com/aws-neuron/neuronx-distributed). Training Llama-2 7B model using neuronx-distributed | Tensor Parallel |
+| [tp_zero1_llama2_70b_hf_pretrain](training/llama2/tp_pp_llama2_70b_hf_pretrain) [Deprecated] | [Deprecation] Please note the following sample will be moved to [NeuronX Distributed Repository](https://github.com/aws-neuron/neuronx-distributed). Training Llama-2 70B model using neuronx-distributed | Tensor Parallel & Pipeline Parallel |
 
 ## Inference
 
