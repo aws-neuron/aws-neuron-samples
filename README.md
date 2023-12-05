@@ -7,11 +7,10 @@ The samples in this repository provide an indication of the types of deep learni
 Samples are organized by use case (training, inference) and deep learning framework (PyTorch, TensorFlow) below:
 
 ## Training
-[Deprecation] Please note the PyTorch NeuronX training samples will be moved to [NeuronX Distributed Repository](https://github.com/aws-neuron/neuronx-distributed).
 
 | Framework | Description | Instance Type |
 | --- | --- | --- |
-| [PyTorch NeuronX (torch-neuronx)](torch-neuronx/README.md#training) | Sample training scripts for training various PyTorch models on AWS Trainium | Trn1, Trn1n & Inf2 |
+| [PyTorch NeuronX (torch-neuronx)](torch-neuronx/README.md#training) | [Deprecation] Please note the PyTorch NeuronX training samples will be moved to [NeuronX Distributed Repository](https://github.com/aws-neuron/neuronx-distributed). Sample training scripts for training various PyTorch models on AWS Trainium | Trn1, Trn1n & Inf2 |
 
 | Usage | Description | Instance Type |
 | --- | --- | --- |
