@@ -6,6 +6,8 @@ For additional information on these training scripts, please refer to the tutori
 
 ## Training
 
+[Deprecation] Please note the following samples will be moved to [NeuronX Distributed Repository](https://github.com/aws-neuron/neuronx-distributed).
+
 The following samples are available for training:
 
 | Name                                                        | Description                                                                                                                             | Training Parallelism |
