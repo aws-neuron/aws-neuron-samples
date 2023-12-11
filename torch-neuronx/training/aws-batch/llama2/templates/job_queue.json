@@ -1,0 +1,11 @@
+{
+   "computeEnvironmentOrder" : [
+      {
+         "computeEnvironment" : "$COMPUTE_ENV_NAME",
+         "order" : 1
+      }
+   ],
+   "jobQueueName" : "$JOB_QUEUE_NAME",
+   "priority" : 1,
+   "state" : "ENABLED"
+}

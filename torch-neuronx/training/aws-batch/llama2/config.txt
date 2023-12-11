@@ -1,0 +1,7 @@
+REGION=<Your-Region>
+SUBNET=<Your-Subnet-Id>
+SG=<Your-Security-Group>
+ECR_REPO=<Your-ECR-Repo>
+INSTANCE_ROLE=<Your-Instance-Role>
+FSX_DNS_NAME=<Your-FSX-DNS-Name>
+MOUNT_NAME=<FSX-Mount-Name>

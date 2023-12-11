@@ -1,0 +1,22 @@
+{
+   "computeEnvironmentName" : "$COMPUTE_ENV_NAME",
+   "computeResources" : {
+      "desiredvCpus" : 0,
+      "maxvCpus" : 2088,
+      "minvCpus" : 0,
+      "instanceRole" : "$INSTANCE_ROLE",
+      "instanceTypes" : [
+         "trn1.32xlarge"
+      ],
+      "launchTemplate" : {
+         "launchTemplateName" : "$LAUNCH_TEMPLATE_NAME",
+         "version" : "$Latest"
+      },
+      "subnets" : [
+         "$SUBNET"
+      ],
+      "type" : "EC2"
+   },
+   "state" : "ENABLED",
+   "type" : "MANAGED"
+}
