@@ -8,7 +8,7 @@
 * Submitter Checklist        
     * Tested on : Neuron SDK <version>, release_version, Instance_type.
     *  I've completely filled out the form above!
-       **MANDATORY PR needs test run output   
+       **(MANDATORY) PR needs test run output   
             * I have provided the output with expected metrics in a metrics.json file
             * I have attached metric.json in the PR
        
