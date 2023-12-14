@@ -3,7 +3,7 @@
 
 *Issue #, sim, or t.corp if available:*
 
-* Link to RTD for my changes: https://github.com/aws-neuron/private-aws-neuron-sdk-staging/YOUR_BRANCH_NAME/
+* Link to RTD for my changes: https://github.com/aws-neuron/aws-neuron/aws-neuron-samples-staging/YOUR_BRANCH_NAME/
 
 * Submitter Checklist        
     * Tested on : Neuron SDK <version>, release_version, Instance_type.
