@@ -61,7 +61,7 @@ if [[ ! -e "tokenizer.model" ]]; then
   echo "Tokenizer File does not exist. Please ensure we have tokenizer file placed in the root directory with the name as 'tokenizer.model'"
   exit 1
 fi
-mv tokenizer.model ./docker/llama2
+mkdir ./docker/llama2 && mv tokenizer.model ./docker/llama2
 
 mkdir -p ./build
 for template in ./templates/*.json; do envsubst < $template > ./build/`basename $template`; done
