@@ -11,6 +11,9 @@ export ECR_REPO
 export INSTANCE_ROLE
 export FSX_DNS_NAME
 export MOUNT_NAME
+export DO_PRE_COMPILATION
+export NEURON_COMPILE_CACHE_URL
+export CHECKPOINT_SAVE_URL
 
 # ECR repo and image details. You can locate the correct Neuron DLC image for 'training' on AWS DLC github page - https://github.com/aws/deep-learning-containers/blob/master/available_images.md#neuron-containers
 export BASE_IMAGE_REPO=763104351884.dkr.ecr.us-west-2.amazonaws.com
@@ -33,11 +36,6 @@ Content-Type: multipart/mixed; boundary="==MYBOUNDARY=="
 
 --==MYBOUNDARY==
 Content-Type: text/cloud-boothook; charset="us-ascii"
-
-runcmd:
-- sudo amazon-linux-extras install -y lustre
-- sudo mkdir /llama_checkpoints
-- sudo mount -t lustre -o relatime,flock ${FSX_DNS_NAME}@tcp:/${MOUNT_NAME} /llama_checkpoints
 
 cloud-init-per once yum_wget yum install -y wget
 cloud-init-per once wget_efa wget -q --timeout=20 https://s3-us-west-2.amazonaws.com/aws-efa-installer/aws-efa-installer-latest.tar.gz -O /tmp/aws-efa-installer-latest.tar.gz
@@ -68,6 +66,7 @@ mv tokenizer.model ./docker/llama2
 mkdir -p ./build
 for template in ./templates/*.json; do envsubst < $template > ./build/`basename $template`; done
 for script in ./scripts/*.sh; do envsubst < $script > ./`basename $script`; chmod u+x ./`basename $script`; done
+envsubst  '$DO_PRE_COMPILATION $NEURON_COMPILE_CACHE_URL $CHECKPOINT_SAVE_URL' < ./scripts/llama_batch_training.sh > ./docker/llama2/llama_batch_training.sh
 
 pushd .
 cd ./docker/llama2

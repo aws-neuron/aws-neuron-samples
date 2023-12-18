@@ -19,7 +19,7 @@ export MALLOC_ARENA_MAX=64
 export XLA_USE_BF16=1
 export TF_NUM_INTEROP_THREADS=8192
 export PROCESSES_PER_NODE=32
-export NEURON_CC_FLAGS="--model-type transformer --distribution-strategy=llm-training --cache_dir=~/neuron_compile_cache/"
+export NEURON_CC_FLAGS="--model-type transformer --distribution-strategy=llm-training --cache_dir=$NEURON_COMPILE_CACHE_URL"
 export NEURON_FUSE_SOFTMAX=1
 export NEURON_RT_ASYNC_EXEC_MAX_INFLIGHT_REQUESTS=3
 export NUM_NEURONCORES=32
@@ -88,7 +88,7 @@ DISTRIBUTED_ARGS="--nproc_per_node $PROCESSES_PER_NODE --nnodes $NTASKS --node_r
 TRAINING_ARGS="--model_path $MODEL_PATH --data_dir $DATA_PATH --tensor_parallel_size $TP_DEGREE --batch_size $MBS \
                 --max_steps $TOTAL_STEPS --warmup_steps $WARMUP_STEPS --lr $LR --grad_accum_usteps $ACC_STEPS --seq_len $SEQ_LEN --sequence_parallel_enabled \
                 --selective_checkpoint_enabled --logging_interval 10 --output_dir $OUTPUT_DIR $EXTRA_ARGS"
-                
+
 TORCH_RUN_COMMAND="torchrun $DISTRIBUTED_ARGS tp_zero1_llama2_7b_hf_pretrain.py $TRAINING_ARGS"
 
 set
@@ -99,8 +99,15 @@ cd llama2/
 echo "Starting Data Processing..."
 python3 get_dataset.py
 
-echo "Starting the parallel compilation..."
-neuron_parallel_compile $TORCH_RUN_COMMAND --steps_this_run $PRE_COMPILATION_STEPS_COUNT
+# Running Pre-Compilation
+if [ "$DO_PRE_COMPILATION" = true ]
+  echo "Starting the parallel compilation..."
+  neuron_parallel_compile $TORCH_RUN_COMMAND --steps_this_run $PRE_COMPILATION_STEPS_COUNT
+fi
 
+# Running Training Job
 echo "Starting the training job..."
 $TORCH_RUN_COMMAND --steps_this_run $STEPS_THIS_RUN
+
+# Uploading checkpoints to S3
+aws s3 cp --recursive $OUTPUT_DIR $CHECKPOINT_SAVE_URL
