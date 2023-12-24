@@ -1,0 +1,22 @@
+{
+   "computeEnvironmentName" : "aws-batch-compute-environment",
+   "computeResources" : {
+      "desiredvCpus" : 0,
+      "instanceRole" : "$INSTANCE_ROLE",
+      "instanceTypes" : [
+         "trn1.32xlarge"
+      ],
+      "launchTemplate" : {
+         "launchTemplateName" : "aws-batch-launch-template",
+         "version" : "$Latest"
+      },
+      "maxvCpus" : 2088,
+      "minvCpus" : 0,
+      "subnets" : [
+         "$SUBNET"
+      ],
+      "type" : "EC2"
+   },
+   "state" : "ENABLED",
+   "type" : "MANAGED"
+}
