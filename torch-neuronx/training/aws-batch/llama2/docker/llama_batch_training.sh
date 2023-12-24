@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
 python -m pip install neuronx_distributed --extra-index-url https://pip.repos.neuron.amazonaws.com
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-set -o pipefail
 ulimit -n 65535
 sysctl -w net.ipv4.ip_local_reserved_ports=41000
 
@@ -19,7 +19,7 @@ export MALLOC_ARENA_MAX=64
 export XLA_USE_BF16=1
 export TF_NUM_INTEROP_THREADS=8192
 export PROCESSES_PER_NODE=32
-export NEURON_CC_FLAGS="--model-type transformer --distribution-strategy=llm-training --cache_dir=$NEURON_COMPILE_CACHE_URL"
+export NEURON_CC_FLAGS="--model-type transformer --distribution-strategy=llm-training --cache_dir=$NEURON_COMPILE_CACHE_URI"
 export NEURON_FUSE_SOFTMAX=1
 export NEURON_RT_ASYNC_EXEC_MAX_INFLIGHT_REQUESTS=3
 export NUM_NEURONCORES=32
@@ -41,7 +41,7 @@ GBS=1024
 # micro batch size
 MBS=1
 # number of steps to run
-TOTAL_STEPS=10000
+TOTAL_STEPS=100
 # warmup steps
 WARMUP_STEPS=100
 # learning rate
@@ -61,9 +61,6 @@ OUTPUT_DIR="/llama_checkpoints"
 
 NODE_ID=0
 WORLD_SIZE=1
-
-# Not sure if we need it
-sudo sysctl -w net.ipv4.ip_local_reserved_ports=44000,48620
 
 if [ -v AWS_BATCH_JOB_MAIN_NODE_PRIVATE_IPV4_ADDRESS ]
 then
@@ -94,13 +91,13 @@ TORCH_RUN_COMMAND="torchrun $DISTRIBUTED_ARGS tp_zero1_llama2_7b_hf_pretrain.py 
 set
 echo "Installing all dependencies..."
 python3 -m pip install -r requirements.txt
-cd llama2/
 
-echo "Starting Data Processing..."
-python3 get_dataset.py
+# Downloading the pre-tokenized dataset from s3
+echo "Downloading tokenized dataset..."
+aws s3 cp $TOKENIZED_DATASET_URI $DATA_PATH --recursive --only-show-errors
 
 # Running Pre-Compilation
-if [ "$DO_PRE_COMPILATION" = true ]
+if [ "$DO_PRE_COMPILATION" = true ]; then
   echo "Starting the parallel compilation..."
   neuron_parallel_compile $TORCH_RUN_COMMAND --steps_this_run $PRE_COMPILATION_STEPS_COUNT
 fi
@@ -110,4 +107,5 @@ echo "Starting the training job..."
 $TORCH_RUN_COMMAND --steps_this_run $STEPS_THIS_RUN
 
 # Uploading checkpoints to S3
-aws s3 cp --recursive $OUTPUT_DIR $CHECKPOINT_SAVE_URL
+aws s3 cp $OUTPUT_DIR $CHECKPOINT_SAVE_URI --recursive --only-show-errors
+echo "Saved the checkpoints to $CHECKPOINT_SAVE_URI."

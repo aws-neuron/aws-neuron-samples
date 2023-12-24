@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # Read variables from config file
 source config.txt
@@ -9,11 +9,10 @@ export SUBNET
 export SG
 export ECR_REPO
 export INSTANCE_ROLE
-export FSX_DNS_NAME
-export MOUNT_NAME
 export DO_PRE_COMPILATION
-export NEURON_COMPILE_CACHE_URL
-export CHECKPOINT_SAVE_URL
+export TOKENIZED_DATASET_URI
+export NEURON_COMPILE_CACHE_URI
+export CHECKPOINT_SAVE_URI
 
 # ECR repo and image details. You can locate the correct Neuron DLC image for 'training' on AWS DLC github page - https://github.com/aws/deep-learning-containers/blob/master/available_images.md#neuron-containers
 export BASE_IMAGE_REPO=763104351884.dkr.ecr.us-west-2.amazonaws.com
@@ -57,32 +56,35 @@ cloud-init-per once neuron_driver6 yum install aws-neuronx-dkms-2.* -y
 EOF
 )
 
+# Creating directories required for setup
+mkdir -p ./data
+mkdir -p ./build
+mkdir -p ./docker/llama2
+
+# Locating and moving tokenizer to required directory
 if [[ ! -e "tokenizer.model" ]]; then
-  echo "Tokenizer File does not exist. Please ensure we have tokenizer file placed in the root directory with the name as 'tokenizer.model'"
+  echo "Tokenizer File does not exist. Please ensure you have tokenizer file placed in the root directory with the name as 'tokenizer.model'"
   exit 1
 fi
-mkdir ./docker/llama2 && mv tokenizer.model ./docker/llama2
+mv tokenizer.model ./data/
 
-mkdir -p ./build
+# Downloading the sample files required for data pre-processing
+wget -q -P ./data/ https://raw.githubusercontent.com/aws-neuron/aws-neuron-samples/master/torch-neuronx/training/llama2/get_dataset.py
+wget -q -P ./data/ https://raw.githubusercontent.com/aws-neuron/aws-neuron-samples/master/torch-neuronx/training/llama2/tp_zero1_llama2_7b_hf_pretrain/config.json
+
+# Environment substitution is required files
 for template in ./templates/*.json; do envsubst < $template > ./build/`basename $template`; done
 for script in ./scripts/*.sh; do envsubst < $script > ./`basename $script`; chmod u+x ./`basename $script`; done
-envsubst  '$DO_PRE_COMPILATION $NEURON_COMPILE_CACHE_URL $CHECKPOINT_SAVE_URL' < ./scripts/llama_batch_training.sh > ./docker/llama2/llama_batch_training.sh
+envsubst  '$DO_PRE_COMPILATION $NEURON_COMPILE_CACHE_URI $CHECKPOINT_SAVE_URI $TOKENIZED_DATASET_URI' < ./docker/llama_batch_training.sh > ./docker/llama2/llama_batch_training.sh
 
-pushd .
+# Downloading the sample files required for Llama training
+pushd . > /dev/null
 cd ./docker/llama2
 wget -q https://raw.githubusercontent.com/aws-neuron/aws-neuron-samples/master/torch-neuronx/training/llama2/tp_zero1_llama2_7b_hf_pretrain/tp_zero1_llama2_7b_hf_pretrain.py
 wget -q https://raw.githubusercontent.com/aws-neuron/aws-neuron-samples/master/torch-neuronx/training/llama2/modeling_llama_nxd.py
 wget -q https://raw.githubusercontent.com/aws-neuron/aws-neuron-samples/master/torch-neuronx/training/llama2/adamw_fp32_optim_params.py
-wget -q https://raw.githubusercontent.com/aws-neuron/aws-neuron-samples/master/torch-neuronx/training/llama2/get_dataset.py
 wget -q https://raw.githubusercontent.com/aws-neuron/aws-neuron-samples/master/torch-neuronx/training/llama2/requirements.txt
 wget -q https://raw.githubusercontent.com/aws-neuron/aws-neuron-samples/master/torch-neuronx/training/llama2/tp_zero1_llama2_7b_hf_pretrain/config.json
-popd
+popd > /dev/null
 
-echo "Building docker image and pushing to your ECR repo..."
-source ./build_docker_image.sh
-
-echo "Creating AWS batch resources including Compute Environment, Job Queue, Job Definition etc..."
-source ./create_resources.sh
-
-echo "Submitting the AWS Batch Job to train the LLama2 - 7B model.."
-source ./submit_job.sh
+echo "Set up has been completed successfully."

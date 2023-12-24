@@ -1,5 +1,6 @@
 #!/bin/bash
-set -eu
+set -euo pipefail
+
 export DOCKER_BUILDKIT=1
 
 pushd ./docker
