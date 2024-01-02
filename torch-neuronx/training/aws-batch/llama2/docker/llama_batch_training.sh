@@ -41,7 +41,7 @@ GBS=1024
 # micro batch size
 MBS=1
 # number of steps to run
-TOTAL_STEPS=100
+TOTAL_STEPS=10000
 # warmup steps
 WARMUP_STEPS=100
 # learning rate
