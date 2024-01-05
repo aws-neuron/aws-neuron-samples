@@ -8,9 +8,15 @@
 * Submitter Checklist        
     * Tested on : Neuron SDK <version>, release_version, Instance_type.
     *  I've completely filled out the form above!
-       **(MANDATORY) PR needs test run output   
+       **(MANDATORY) PR needs test run output
+        
             * I have provided the output with expected metrics in a metrics.json file
+       
             * I have attached metric.json in the PR
+
+            * I have attached golden_step_loss.txt
+       
+            * I have added screen shot of plotted loss curve
        
         *  (If applicable) I've automated a test to safegaurd my changes from regression.
         *  (If applicable) I've posted test collateral to prove my change was effective and not harmful.
