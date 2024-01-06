@@ -11,6 +11,9 @@ As illustrated in the below diagram, running jobs on AWS Batch require a few res
 ![image info](./images/aws-batch.png)
 
 ## Prerequisite infrastructure
+
+It is advised not to execute these scripts on your local machine. Instead, it is recommended to clone this GitHub repository and run the provided scripts on an x86_64-based instance, preferably utilizing a `C5.xlarge` instance type with the Linux/Ubuntu operating system.
+
 Below is the list of resources and tools you should have before getting started with the training on AWS Batch. 
 
 ### VPC Creation
@@ -19,8 +22,11 @@ For this example you would require a VPC that has at least two subnets(one publi
 ### ECR Repo 
 You would also need and ECR repo to store our docker container image. Please follow instructions [here](https://docs.aws.amazon.com/AmazonECR/latest/userguide/repository-create.html) on how to create an ECR repo.
 
+### S3 Bucket
+An Amazon Simple Storage Service (S3) bucket would be required for the storage of tokenized datasets, Neuron compile cache artifacts, and Llama checkpoint files. Learn more about it [here](https://docs.aws.amazon.com/AmazonS3/latest/userguide/creating-bucket.html).
+
 ### IAM Role
-An IAM role would be needed which will be associated with the Trn1 instances. please ensure this role has `AmazonEC2ContainerServiceforEC2Role` and `AmazonS3FullAccess` policies associated with it. 
+An IAM role would be needed which will be associated with the Trn1 instances. please ensure this role has `AmazonEC2ContainerServiceforEC2Role` and `AmazonS3FullAccess` policies associated with it. To learn more about IAM Roles, refer [here](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create.html).
 
 ### AWS CLI
 AWS CLI should be installed and configured with permissions for Batch and ECR. You can follow the instructions mentioned [here](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) to install AWS CLI. 

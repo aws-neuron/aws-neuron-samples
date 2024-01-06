@@ -58,6 +58,9 @@ PRE_COMPILATION_STEPS_COUNT=2
 STEPS_THIS_RUN=-1
 # output directory
 OUTPUT_DIR="/llama_checkpoints"
+# S3 checkpoint directory
+CURRENT_BATCH_JOB_ID=$(echo "$AWS_BATCH_JOB_ID" | sed 's/#.*//')
+CHECKPOINT_PATH="$CHECKPOINT_SAVE_URI$CURRENT_BATCH_JOB_ID"
 
 NODE_ID=0
 WORLD_SIZE=1
@@ -98,7 +101,7 @@ aws s3 cp $TOKENIZED_DATASET_URI $DATA_PATH --recursive --only-show-errors
 
 # Running Pre-Compilation
 if [ "$DO_PRE_COMPILATION" = true ]; then
-  echo "Starting the parallel compilation..."
+  echo "Starting neuron parallel compilation..."
   neuron_parallel_compile $TORCH_RUN_COMMAND --steps_this_run $PRE_COMPILATION_STEPS_COUNT
 fi
 
@@ -107,5 +110,5 @@ echo "Starting the training job..."
 $TORCH_RUN_COMMAND --steps_this_run $STEPS_THIS_RUN
 
 # Uploading checkpoints to S3
-aws s3 cp $OUTPUT_DIR $CHECKPOINT_SAVE_URI --recursive --only-show-errors
-echo "Saved the checkpoints to $CHECKPOINT_SAVE_URI."
+aws s3 cp $OUTPUT_DIR $CHECKPOINT_PATH --recursive --only-show-errors
+echo "Saved the checkpoints to $CHECKPOINT_PATH"
