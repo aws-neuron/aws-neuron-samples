@@ -124,7 +124,7 @@ The script orchestrates the provisioning of essential resources required for the
 This script constructs a Docker container image tailored for our training job. This image encompasses instructions for executing Llama2 - 7B training on Trainium, utilizing the `neuronx_distributed` library with `Tensor Parallelism` and the `ZeRO-1 Optimizer`. Afterward, the recently generated Docker container image is uploaded to your Amazon Elastic Container Registry (ECR) repository mentioned as `ECR_REPO` in config.txt. 
 
 ##### Note: 
-After running, setup.sh, you will be able to find the hyperparameters for Llama2-7B training job in `./docker/llama2/llama_batch_training.sh`. If you need to modify any of these values, please make the required changes in this file before running the `build_and_push_docker_image.sh`.
+After running setup.sh, you will be able to find the hyperparameters for Llama2-7B training job in `./docker/llama2/llama_batch_training.sh`. If you wish to modify any of these hyperparameters, please make the required changes in this file before running `build_and_push_docker_image.sh`.
 
 #### 5. submit_batch_job.sh
 This script submits the AWS Batch job to commence the Llama2 model training. Upon submission, an `ECS Cluster` is dynamically established. Once operational, you can navigate through the cluster to monitor all tasks actively running on the `Trn1.32xl` instances, launched through this job.
