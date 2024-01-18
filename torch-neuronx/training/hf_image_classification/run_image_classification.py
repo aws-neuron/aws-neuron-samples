@@ -167,7 +167,7 @@ class ModelArguments:
 
 def collate_fn(examples):
     pixel_values = torch.stack([example["pixel_values"] for example in examples])
-    labels = torch.tensor([example["labels"] for example in examples])
+    labels = torch.tensor([example["label"] for example in examples])
     return {"pixel_values": pixel_values, "labels": labels}
 
 
@@ -236,7 +236,6 @@ def main():
             data_args.dataset_name,
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
-            task="image-classification",
             use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
@@ -249,7 +248,6 @@ def main():
             "imagefolder",
             data_files=data_files,
             cache_dir=model_args.cache_dir,
-            task="image-classification",
         )
 
     # If we don't have a validation split, split off a percentage of train as validation.
@@ -261,7 +259,7 @@ def main():
 
     # Prepare label mappings.
     # We'll include these in the model's config to get human readable labels in the Inference API.
-    labels = dataset["train"].features["labels"].names
+    labels = dataset["train"].features["label"].names
     label2id, id2label = {}, {}
     for i, label in enumerate(labels):
         label2id[label] = str(i)
@@ -328,13 +326,13 @@ def main():
     def train_transforms(example_batch):
         """Apply _train_transforms across a batch."""
         example_batch["pixel_values"] = [
-            _train_transforms(pil_img.convert("RGB")) for pil_img in example_batch["image"]
+            _train_transforms(pil_img.convert("RGB")) for pil_img in example_batch["img"]
         ]
         return example_batch
 
     def val_transforms(example_batch):
         """Apply _val_transforms across a batch."""
-        example_batch["pixel_values"] = [_val_transforms(pil_img.convert("RGB")) for pil_img in example_batch["image"]]
+        example_batch["pixel_values"] = [_val_transforms(pil_img.convert("RGB")) for pil_img in example_batch["img"]]
         return example_batch
 
     if training_args.do_train:
@@ -390,7 +388,6 @@ def main():
     # Write model card and (optionally) push to hub
     kwargs = {
         "finetuned_from": model_args.model_name_or_path,
-        "tasks": "image-classification",
         "dataset": data_args.dataset_name,
         "tags": ["image-classification", "vision"],
     }
