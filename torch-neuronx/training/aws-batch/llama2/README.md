@@ -128,6 +128,7 @@ After running setup.sh, you will be able to find the hyperparameters for Llama2-
 
 #### 5. submit_batch_job.sh
 This script submits the AWS Batch job to commence the Llama2 model training. Upon submission, an `ECS Cluster` is dynamically established. Once operational, you can navigate through the cluster to monitor all tasks actively running on the `Trn1.32xl` instances, launched through this job.
+By default, this example is configured to run on 4 trn1.32xl instances. If you wish to customize this setting, you can do so by modifying the `numNodes` parameter in the `submit_batch_job.sh` script.
 
 Once the job is submitted, you can use `Amazon CloudWatch` Logs to monitor, store, and view all your logs from AWS Batch. Refer to [the documentation](https://docs.aws.amazon.com/batch/latest/userguide/batch-eks-cloudwatch-logs.html) for additional details and insights into the logging process. 
 

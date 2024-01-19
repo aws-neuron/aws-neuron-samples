@@ -15,11 +15,11 @@ export NEURON_COMPILE_CACHE_URI
 export CHECKPOINT_SAVE_URI
 
 # ECR repo and image details. You can locate the correct Neuron DLC image for 'training' on AWS DLC github page - https://github.com/aws/deep-learning-containers/blob/master/available_images.md#neuron-containers
-export BASE_IMAGE_REPO=763104351884.dkr.ecr.us-west-2.amazonaws.com
+export BASE_IMAGE_REPO=763104351884.dkr.ecr.$REGION.amazonaws.com
 export BASE_IMAGE_NAME=pytorch-training-neuronx
 export BASE_IMAGE_TAG=1.13.1-neuronx-py310-sdk2.15.0-ubuntu20.04
 
-export ECS_AMI_NAME=/aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id
+export ECS_AMI_NAME=/aws/service/ecs/optimized-ami/amazon-linux-2023/recommended/image_id
 export ECS_AMI=$(aws ssm get-parameter --region $REGION --name $ECS_AMI_NAME | jq -r .Parameter.Value)
 
 export PLACEMENT_GROUP_NAME=aws-batch-placement-group
@@ -36,6 +36,7 @@ Content-Type: multipart/mixed; boundary="==MYBOUNDARY=="
 --==MYBOUNDARY==
 Content-Type: text/cloud-boothook; charset="us-ascii"
 
+#!/bin/bash
 cloud-init-per once yum_wget yum install -y wget
 cloud-init-per once wget_efa wget -q --timeout=20 https://s3-us-west-2.amazonaws.com/aws-efa-installer/aws-efa-installer-latest.tar.gz -O /tmp/aws-efa-installer-latest.tar.gz
 cloud-init-per once tar_efa tar -xf /tmp/aws-efa-installer-latest.tar.gz -C /tmp
