@@ -1,0 +1,139 @@
+{
+  "DryRun": false,
+  "LaunchTemplateName": "$LAUNCH_TEMPLATE_NAME",
+  "VersionDescription": "Override Template",
+  "LaunchTemplateData": {
+    "IamInstanceProfile": {
+      "Arn": "$INSTANCE_ROLE"
+    },
+    "InstanceType" : "trn1.32xlarge",
+    "Placement" : {
+         "GroupName" : "$PLACEMENT_GROUP_NAME"
+      },
+    "BlockDeviceMappings": [
+      {
+        "DeviceName": "/dev/xvda",
+        "Ebs": {
+          "VolumeSize": 200,
+          "DeleteOnTermination": true
+        }
+      }
+    ],
+    "ImageId": "$ECS_AMI",
+    "Monitoring": {
+      "Enabled": true
+    },
+    "DisableApiTermination": false,
+    "InstanceInitiatedShutdownBehavior": "stop",
+    "UserData": "$USER_DATA",
+    "TagSpecifications": [
+      {
+        "ResourceType": "instance",
+        "Tags": [
+          {
+            "Key": "purpose",
+            "Value": "batch multinode training"
+          }
+        ]
+      }
+    ],
+    "MetadataOptions": {
+      "HttpTokens": "required",
+      "HttpPutResponseHopLimit": 5,
+      "HttpEndpoint": "enabled"
+    },
+    "NetworkInterfaces" : [
+         {
+            "Description" : "NetworkInterfaces Configuration For EFA and Batch",
+            "DeviceIndex" : 0,
+            "Groups" : [
+               "$SG"
+            ],
+            "InterfaceType" : "efa",
+            "NetworkCardIndex" : 0,
+            "SubnetId" : "$SUBNET"
+         },
+         {
+            "Description" : "NetworkInterfaces Configuration For EFA and Batch",
+            "DeviceIndex" : 1,
+            "Groups" : [
+               "$SG"
+            ],
+            "InterfaceType" : "efa",
+            "NetworkCardIndex" : 1,
+            "SubnetId" : "$SUBNET"
+         },
+         {
+            "Description" : "NetworkInterfaces Configuration For EFA and Batch",
+            "DeviceIndex" : 1,
+            "Groups" : [
+               "$SG"
+            ],
+            "InterfaceType" : "efa",
+            "NetworkCardIndex" : 2,
+            "SubnetId" : "$SUBNET"
+         },
+         {
+            "Description" : "NetworkInterfaces Configuration For EFA and Batch",
+            "DeviceIndex" : 1,
+            "Groups" : [
+               "$SG"
+            ],
+            "InterfaceType" : "efa",
+            "NetworkCardIndex" : 3,
+            "SubnetId" : "$SUBNET"
+         },
+         {
+            "Description" : "NetworkInterfaces Configuration For EFA and Batch",
+            "DeviceIndex" : 1,
+            "Groups" : [
+               "$SG"
+            ],
+            "InterfaceType" : "efa",
+            "NetworkCardIndex" : 4,
+            "SubnetId" : "$SUBNET"
+         },
+         {
+            "Description" : "NetworkInterfaces Configuration For EFA and Batch",
+            "DeviceIndex" : 1,
+            "Groups" : [
+               "$SG"
+            ],
+            "InterfaceType" : "efa",
+            "NetworkCardIndex" : 5,
+            "SubnetId" : "$SUBNET"
+         },
+         {
+            "Description" : "NetworkInterfaces Configuration For EFA and Batch",
+            "DeviceIndex" : 1,
+            "Groups" : [
+               "$SG"
+            ],
+            "InterfaceType" : "efa",
+            "NetworkCardIndex" : 6,
+            "SubnetId" : "$SUBNET"
+         },
+         {
+            "Description" : "NetworkInterfaces Configuration For EFA and Batch",
+            "DeviceIndex" : 1,
+            "Groups" : [
+               "$SG"
+            ],
+            "InterfaceType" : "efa",
+            "NetworkCardIndex" : 7,
+            "SubnetId" : "$SUBNET"
+         }
+      ]
+  },
+  "TagSpecifications": [
+    {
+      "ResourceType": "launch-template",
+      "Tags": [
+        {
+          "Key": "purpose",
+          "Value": "batch training"
+        }
+      ]
+    }
+  ]
+}

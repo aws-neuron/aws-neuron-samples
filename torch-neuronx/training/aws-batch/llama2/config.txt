@@ -1,0 +1,9 @@
+REGION=us-east-1
+SUBNET=subnet-012345abcd5689
+SG=sg-012345abcd5689
+ECR_REPO=1010101010.dkr.ecr.us-east-1.amazonaws.com/your-docker-repo
+INSTANCE_ROLE=arn:aws:iam::1010101010:instance-profile/your-instance-role
+DO_PRE_COMPILATION=true
+TOKENIZED_DATASET_URI=s3://your/s3/location/to/store/tokenized/dataset/
+NEURON_COMPILE_CACHE_URI=s3://your/s3/location/to/store/compile-cache/
+CHECKPOINT_SAVE_URI=s3://your/s3/location/to/store/tokenized/checkpoints/
