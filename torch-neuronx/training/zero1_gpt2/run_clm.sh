@@ -41,13 +41,13 @@ export NEURON_RT_STOCHASTIC_ROUNDING_EN=1
 if [[ "BF16" == $TRAINING_PRECISION ]]; then
     echo "USING BF16 ONLY"
     export XLA_USE_BF16=1
-    export NEURON_CC_FLAGS="--retry_failed_compilation --distribution-strategy FSDP --model-type transformer"
+    export NEURON_CC_FLAGS="--retry_failed_compilation --distribution-strategy llm-training --model-type transformer"
 elif [[ "MIXED" == $TRAINING_PRECISION ]]; then
     echo "USING MIXED PRECISION BF16 and FP32"
-    export NEURON_CC_FLAGS="--retry_failed_compilation --distribution-strategy FSDP --enable-mixed-precision-accumulation --model-type transformer --enable-experimental-spmd --internal-ccop-bucketing --internal-ccop-bucketing-allgather-size-in-bytes 62481600 --internal-ccop-bucketing-reducescatter-size-in-bytes 62481600 --internal-ccop-bucketing-allreduce-size-in-bytes 1 --tensorizer-options=\'--no-enable-tritium-loopfusion\'"
+    export NEURON_CC_FLAGS="--retry_failed_compilation --enable-mixed-precision-accumulation --distribution-strategy llm-training --model-type transformer"
 else
     echo "USING FP32 as default"
-    export NEURON_CC_FLAGS="--retry_failed_compilation --distribution-strategy FSDP --model-type transformer"
+    export NEURON_CC_FLAGS="--retry_failed_compilation --distribution-strategy llm-training --model-type transformer"
 fi
 
 NEURON_CC_FLAGS+=" --cache_dir=$HOME/neuron_cache/gpt_1p5B/`hostname`"
