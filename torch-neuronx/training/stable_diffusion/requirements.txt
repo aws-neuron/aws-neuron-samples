@@ -1,0 +1,5 @@
+torchvision
+diffusers==0.19.3 # Intentionally pin to 0.19.3. More recent versions have problems on Neuron.
+transformers==4.31.0
+datasets==2.14.2
+fsspec==2023.9.2
