@@ -4,7 +4,7 @@ on:
   pull_request_target:
     types: [labeled, synchronize]
     branches:
-      - master
+      - yaml-pr-testing
 
 jobs:
   merge-to-dynamic-branch:
