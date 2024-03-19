@@ -21,6 +21,7 @@
         *  (If applicable) I've automated a test to safegaurd my changes from regression.
         *  (If applicable) I've posted test collateral to prove my change was effective and not harmful.
         *  (If applicable) I've added someone from QA to the list of reviewers. Do this if you didn't make an automated test or feel it's appropriate for another reason.
+        *  (If applicable) I've reviewed the licenses of updated and new binaries and their dependencies to make sure all licenses are on the pre-approved Amazon license list.
 * Reviewer Checklist
         *  I've verified the changes render correctly on RTD (link above)
         *  I've ensured the submitter completed the form
