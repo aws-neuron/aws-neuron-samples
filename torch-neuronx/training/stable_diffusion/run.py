@@ -18,7 +18,7 @@ def parse_args():
     parser.add_argument('--resolution', choices=[512], default=512, type=int, help='Which resolution of model to train')
     parser.add_argument('--batch_size', type=int, default=2, help='What per-device microbatch size to use')
     parser.add_argument('--gradient_accumulation_steps', type=int, default=2, help='How many gradient accumulation steps to do (1 for no gradient accumulation)')
-    parser.add_argument('--epochs', type=int, default=200, help='How many epochs to train for')
+    parser.add_argument('--epochs', type=int, default=6, help='How many epochs to train for')
 
     # For saving checkpoints
     parser.add_argument("--checkpointing_steps", type=int, default=50,
@@ -31,7 +31,7 @@ def parse_args():
     )
 
     # Used to save a copy of the trained model for inference
-    parser.add_argument("--save_model_epochs", type=int, default=None,
+    parser.add_argument("--save_model_epochs", type=int, default=1,
         help=(
             "Save a copy of the trained model every X epochs in a format that can be loaded using HuggingFace's from_pretrained method."
         ))

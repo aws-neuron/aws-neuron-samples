@@ -335,7 +335,7 @@ def train(args):
     # Download the dataset
     xm.master_print('Downloading dataset')
     # TODO: make this a parameter of the script
-    dataset_name = "lambdalabs/pokemon-blip-captions"
+    dataset_name = "m1guelpf/nouns"
     dataset = load_dataset(dataset_name)
     args.dataset_name = dataset_name
 
@@ -560,6 +560,11 @@ def train(args):
 
             before_batch_load_time = time.perf_counter_ns()
 
+            # Only need a handful of training steps for graph extraction. Cut it off so we don't take forever when
+            # using a large dataset.
+            if os.environ.get("NEURON_EXTRACT_GRAPHS_ONLY", None) and cumulative_train_step > 5:
+                break
+
         if args.save_model_epochs is not None and epoch % args.save_model_epochs == 0 and not os.environ.get("NEURON_EXTRACT_GRAPHS_ONLY", None):
             save_pipeline(args.results_dir + f"-EPOCH_{epoch}", args.model_id, unet, vae, text_encoder)
         
@@ -567,6 +572,11 @@ def train(args):
         xm.master_print(f" Entire epoch {epoch} took {(end_epoch_time - start_epoch_time) / (10 ** 9)} s")
         xm.master_print(f" Given {step + 1} many steps, e2e per iteration is {(end_epoch_time - start_epoch_time) / (step + 1) / (10 ** 6)} ms")
         xm.master_print(f"!!! Finished epoch {epoch}")
+
+        # Only need a handful of training steps for graph extraction. Cut it off so we don't take forever when
+        # using a large dataset.
+        if os.environ.get("NEURON_EXTRACT_GRAPHS_ONLY", None) and cumulative_train_step > 5:
+            break
 
     # Save the trained model for use in inference
     xm.rendezvous('finish-training')
