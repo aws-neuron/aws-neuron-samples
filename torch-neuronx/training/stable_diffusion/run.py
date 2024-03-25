@@ -21,7 +21,8 @@ def parse_args():
     parser.add_argument('--epochs', type=int, default=6, help='How many epochs to train for')
 
     # For saving checkpoints
-    parser.add_argument("--checkpointing_steps", type=int, default=50,
+    # Save every 750 steps ~= 1 epoch (at batch2) by default
+    parser.add_argument("--checkpointing_steps", type=int, default=750,
         help=(
             "Save a checkpoint of the training state every X training steps. These checkpoints are only suitable for resuming"
             " training using `--resume_from_checkpoint`."),
