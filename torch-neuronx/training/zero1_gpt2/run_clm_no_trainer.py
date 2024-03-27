@@ -81,6 +81,22 @@ import torch_xla.distributed.xla_backend
 from torch_xla.distributed.zero_redundancy_optimizer import ZeroRedundancyOptimizer
 from neuron_utils import *
 from accelerate.utils.imports import is_tpu_available
+
+# Work around `Check failed: tensor_data`` error in torch-neuronx 2.1 when using torch.utils.data.DataLoader with shuffle=True
+import copy
+import torch_xla.core.xla_model as xm
+def mesh_reduce(tag, data, reduce_fn):
+    xm.rendezvous(tag)
+    xdatain = copy.deepcopy(data)
+    xdatain = xdatain.to("xla")
+    xdata = xm.all_gather(xdatain, pin_layout=False)
+    cpu_xdata = xdata.detach().to("cpu")
+    cpu_xdata_split = torch.split(cpu_xdata, xdatain.shape[0])
+    xldata = [x for x in cpu_xdata_split]
+    xm.mark_step()
+    return reduce_fn(xldata)
+xm.mesh_reduce = mesh_reduce
+
 # we need to use the torch_xla checkpoint. Otherwise the some checkpointing patterns will be eliminated by the compiler common expression elimination
 torch.utils.checkpoint.checkpoint = torch_xla.utils.checkpoint.checkpoint
 
@@ -534,7 +550,7 @@ def main():
 
     # DataLoaders creation:
     train_dataloader = DataLoader(
-        train_dataset, shuffle=True, collate_fn=default_data_collator, batch_size=args.per_device_train_batch_size
+        train_dataset, shuffle=(os.environ.get("NEURON_EXTRACT_GRAPHS_ONLY", None) == None), collate_fn=default_data_collator, batch_size=args.per_device_train_batch_size
     )
     eval_dataloader = DataLoader(
         eval_dataset, collate_fn=default_data_collator, batch_size=args.per_device_eval_batch_size
@@ -653,7 +669,6 @@ def main():
     xm.mark_step()
 
     optimizer_step_done_at_least_once=0
-    torch_neuronx.xla_impl.ops.set_unload_prior_neuron_models_mode(True)
     running_loss = torch.zeros(1, ).to(device)
     for epoch in range(starting_epoch, args.num_train_epochs):
         model.train()
@@ -672,7 +687,6 @@ def main():
             if optimizer_step_done_at_least_once < 2:
                 optimizer_step_done_at_least_once+=1
                 if optimizer_step_done_at_least_once==2:
-                    torch_neuronx.xla_impl.ops.set_unload_prior_neuron_models_mode(False)
                     time.sleep(1)
                     xm.rendezvous("Init Complete")
 
