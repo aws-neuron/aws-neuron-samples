@@ -1,19 +1,20 @@
-name: Aggregate PRs into Staging Branch for Automated Testing
+name: Merge PR into Dynamic Branch on Label
 
-on: 
-  pull_request:
-    types: [opened, reopened, synchronize, closed]
+on:
+  pull_request_target:
+    types: [labeled, synchronize]
     branches:
       - master
 
 jobs:
-  merge-to-target:
-    if: github.event.pull_request.state == 'open' && !github.event.pull_request.draft
+  merge-to-dynamic-branch:
+    if: github.event.label.name != 'do-not-merge' #Excludes those labeled with do-not-merge
     runs-on: ubuntu-latest
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v2
       with:
+        ref: ${{ github.event.pull_request.head.ref }}
         fetch-depth: 0
 
     - name: Configure Git
@@ -21,16 +22,43 @@ jobs:
         git config user.name "GitHub Actions"
         git config user.email "actions@github.com"
 
-    - name: Merge PR into Testing Branch
+    - name: Check PR Labels and Merge for New Commit Events
+      if: github.event.action == 'synchronize'
       run: |
-        git fetch origin
-        git checkout -b testing origin/testing
-        git merge ${{ github.event.pull_request.head.sha }} --no-ff --no-commit
-        git commit -m "Merged PR #${{ github.event.pull_request.number }}"
-        git push origin testing
+        LABELS_JSON=$(gh pr view ${{ github.event.pull_request.number }} --json labels)
+        LABELS=$(echo "$LABELS_JSON" | jq -r '.labels[].name')
+        for LABEL_BRANCH in $LABELS; do
+          # Check if the branch exists
+          if git show-ref --verify --quiet refs/heads/$LABEL_BRANCH; then
+            echo "Branch $LABEL_BRANCH already exists."
+          else
+            echo "Branch $LABEL_BRANCH does not exist, creating it."
+            git branch $LABEL_BRANCH origin/master
+          fi
+          git checkout $LABEL_BRANCH
 
-    - name: Cleanup if PR Closed
-      if: github.event.action == 'closed'
+          # Merge PR changes into dynamic branch
+          git merge ${{ github.event.pull_request.head.sha }} --no-ff --no-commit
+          git commit -m "Merged PR #${{ github.event.pull_request.number }} due to new commits on labeled PR"
+          git push origin $LABEL_BRANCH
+        done
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Merge for Labeled Event
+      if: github.event.action == 'labeled'
       run: |
-        # Add commands to reset or clean up target branch
-        # Example: git reset --hard origin/master
+        LABEL_BRANCH=${{ github.event.label.name }}
+        # Check if the branch exists
+        if git show-ref --verify --quiet refs/heads/$LABEL_BRANCH; then
+          echo "Branch $LABEL_BRANCH already exists."
+        else
+          echo "Branch $LABEL_BRANCH does not exist, creating it."
+          git branch $LABEL_BRANCH origin/master
+        fi
+        git checkout $LABEL_BRANCH
+
+        # Merge PR changes into dynamic branch
+        git merge ${{ github.event.pull_request.head.sha }} --no-ff --no-commit
+        git commit -m "Merged PR #${{ github.event.pull_request.number }} due to label '$LABEL_BRANCH'"
+        git push origin $LABEL_BRANCH
