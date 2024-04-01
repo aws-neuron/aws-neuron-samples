@@ -335,7 +335,7 @@ def train(args):
     # Download the dataset
     xm.master_print('Downloading dataset')
     # TODO: make this a parameter of the script
-    dataset_name = "lambdalabs/pokemon-blip-captions"
+    dataset_name = "m1guelpf/nouns"
     dataset = load_dataset(dataset_name)
     args.dataset_name = dataset_name
 
@@ -473,37 +473,31 @@ def train(args):
             xm.master_print(f"*** Running epoch {epoch} step {step} (cumulative step {cumulative_train_step})")
             start_time = time.perf_counter_ns()
     
+            # Convert input image to latent space and add noise
             with torch.no_grad():
-                if args.unroll_vae:
-                    vae_inputs_batched = batch['pixel_values']
-                    vae_inputs_unbatched = torch.split(vae_inputs_batched, 1, dim=0)
+                vae_inputs_batched = batch['pixel_values']
+                vae_inputs_unbatched = torch.split(vae_inputs_batched, 1, dim=0)
 
-                    vae_outputs = []
-                    for vae_input in vae_inputs_unbatched:
-                        these_latents = vae.encode(vae_input).latent_dist.sample()
-                        these_latents = these_latents * 0.18215
-                        these_latents = these_latents.float()  # Cast latents to bf16 (under XLA_DOWNCAST_BF16)
+                vae_outputs = []
+                # Intentionally unroll the VAE execution here. Compiler produces poor QoR for the VAE at batch > 1
+                for vae_input in vae_inputs_unbatched:
+                    these_latents = vae.encode(vae_input).latent_dist.sample()
+                    these_latents = these_latents * 0.18215
+                    these_latents = these_latents.float()  # Cast latents to bf16 (under XLA_DOWNCAST_BF16)
 
-                        vae_outputs.append(these_latents)
-                    latents = torch.cat(vae_outputs, dim=0)
+                    vae_outputs.append(these_latents)
+                latents = torch.cat(vae_outputs, dim=0)
 
-                    del vae_inputs_batched
-                    del vae_inputs_unbatched
-                    del vae_input
-                    del vae_outputs
-                    del these_latents
-                    
-                else:
-                    # Convert input image to latent space and add noise
-                    latents = vae.encode(batch['pixel_values']).latent_dist.sample()
-                    latents = latents * 0.18215
-                    latents = latents.float()  # Cast latents to bf16 (under XLA_DOWNCAST_BF16)
-
+                del vae_inputs_batched
+                del vae_inputs_unbatched
+                del vae_input
+                del vae_outputs
+                del these_latents
 
             gc.collect()
 
-            if args.mark_step_after_vae:
-                xm.mark_step()
+            # mark_step here to separate VAE into its own graph. Results in better compiler QoR.
+            xm.mark_step()
 
             with torch.no_grad():
                 noise = torch.randn(latents.size(), dtype=latents.dtype, layout=latents.layout, device='cpu')
@@ -566,6 +560,11 @@ def train(args):
 
             before_batch_load_time = time.perf_counter_ns()
 
+            # Only need a handful of training steps for graph extraction. Cut it off so we don't take forever when
+            # using a large dataset.
+            if os.environ.get("NEURON_EXTRACT_GRAPHS_ONLY", None) and cumulative_train_step > 5:
+                break
+
         if args.save_model_epochs is not None and epoch % args.save_model_epochs == 0 and not os.environ.get("NEURON_EXTRACT_GRAPHS_ONLY", None):
             save_pipeline(args.results_dir + f"-EPOCH_{epoch}", args.model_id, unet, vae, text_encoder)
         
@@ -573,6 +572,11 @@ def train(args):
         xm.master_print(f" Entire epoch {epoch} took {(end_epoch_time - start_epoch_time) / (10 ** 9)} s")
         xm.master_print(f" Given {step + 1} many steps, e2e per iteration is {(end_epoch_time - start_epoch_time) / (step + 1) / (10 ** 6)} ms")
         xm.master_print(f"!!! Finished epoch {epoch}")
+
+        # Only need a handful of training steps for graph extraction. Cut it off so we don't take forever when
+        # using a large dataset.
+        if os.environ.get("NEURON_EXTRACT_GRAPHS_ONLY", None) and cumulative_train_step > 5:
+            break
 
     # Save the trained model for use in inference
     xm.rendezvous('finish-training')
@@ -611,8 +615,6 @@ def parse_args():
     parser.add_argument('--batch_size', type=int, help='What per-device microbatch size to use')
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1, help='How many gradient accumulation steps to do (1 for no gradient accumulation)')
     parser.add_argument('--epochs', type=int, default=2000, help='How many epochs to train for')
-    parser.add_argument('--unroll_vae', action='store_true', help='Whether to unroll the VAE inference step (in batch dimension)')
-    parser.add_argument('--mark_step_after_vae', action='store_true', help='Whether to mark step after the VAE inference step')
 
     # Arguments for checkpointing
     parser.add_argument("--checkpointing_steps", type=int, default=None,

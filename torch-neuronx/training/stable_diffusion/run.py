@@ -14,16 +14,15 @@ def parse_args():
             prog='neuron-sd-training-test-wrapper',
             description='Test wrapper for Neuron Stable Diffusion training recipe')
 
-    parser.add_argument('--model', choices=['2.1', '1.5'], help='Which model to train')
-    parser.add_argument('--resolution', choices=[512, 768], type=int, help='Which resolution of model to train')
-    parser.add_argument('--batch_size', type=int, help='What per-device microbatch size to use')
+    parser.add_argument('--model', choices=['2.1', '1.5'], default='2.1', help='Which model to train')
+    parser.add_argument('--resolution', choices=[512], default=512, type=int, help='Which resolution of model to train')
+    parser.add_argument('--batch_size', type=int, default=2, help='What per-device microbatch size to use')
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1, help='How many gradient accumulation steps to do (1 for no gradient accumulation)')
-    parser.add_argument('--epochs', type=int, default=2000, help='How many epochs to train for')
-    parser.add_argument('--unroll_vae', action='store_true', help='Whether to unroll the VAE inference step (in batch dimension)')
-    parser.add_argument('--mark_step_after_vae', action='store_true', help='Whether to mark step after the VAE inference step')
+    parser.add_argument('--epochs', type=int, default=6, help='How many epochs to train for')
 
     # For saving checkpoints
-    parser.add_argument("--checkpointing_steps", type=int, default=None,
+    # Save every 750 steps ~= 1 epoch (at batch2) by default
+    parser.add_argument("--checkpointing_steps", type=int, default=750,
         help=(
             "Save a checkpoint of the training state every X training steps. These checkpoints are only suitable for resuming"
             " training using `--resume_from_checkpoint`."),
@@ -33,7 +32,7 @@ def parse_args():
     )
 
     # Used to save a copy of the trained model for inference
-    parser.add_argument("--save_model_epochs", type=int, default=None,
+    parser.add_argument("--save_model_epochs", type=int, default=1,
         help=(
             "Save a copy of the trained model every X epochs in a format that can be loaded using HuggingFace's from_pretrained method."
         ))
@@ -52,11 +51,11 @@ def parse_args():
     parser.add_argument('--neuron_rt_stochastic_rounding_seed', type=int, default=0, help="The setting for the NEURON_RT_STOCHASTIC_ROUNDING_SEED, which controls the seed for stochastic rounding.")
 
     # Path to dir containing the training and inference scripts
-    parser.add_argument('--training_script_path', type=str, default=None)
+    parser.add_argument('--training_script_path', type=str, default="./sd_training_neuron.py", help="Path to the training script (sd_training_neuron.py)")
 
     args = parser.parse_args()
 
-    assert args.training_script_path is not None, "Need to pass the dir containing the training and inference scripts!"
+    assert args.training_script_path is not None, "Need to pass the path of the training script via --training_script_path (path to sd_training_neuron.py)"
 
     # Build the test name that will get used by the ModuleTester out of the args we parsed
     test_name = f"sd_{args.model}_training-{args.resolution}-batch{args.batch_size}-AdamW-{WORLD_SIZE}w-zero1_optimizer-grad_checkpointing"
@@ -83,8 +82,6 @@ if __name__ == "__main__":
     os.environ.pop("XLA_IR_DEBUG", None)
     os.environ.pop("XLA_HLO_DEBUG", None)
 
-    unroll_vae = "--unroll_vae" if args.unroll_vae else ""
-    mark_step_after_vae = "--mark_step_after_vae" if args.mark_step_after_vae else ""
     gradient_accumulation_steps = f"--gradient_accumulation_steps {args.gradient_accumulation_steps}" if args.gradient_accumulation_steps is not None else ""
     save_model_epochs = f"--save_model_epochs {args.save_model_epochs}" if args.save_model_epochs is not None else ""
     checkpointing_steps = f"--checkpointing_steps {args.checkpointing_steps}" if args.checkpointing_steps is not None else ""
@@ -93,7 +90,7 @@ if __name__ == "__main__":
     resume_checkpoint_step = f"--resume_checkpoint_step {args.resume_checkpoint_step}" if args.resume_checkpoint_step is not None else ""
 
     # Only need to run for 1 epoch for NPC to do its thing
-    run_command = f"torchrun --nproc_per_node={WORLD_SIZE} {args.training_script_path} --model {args.model} --resolution {args.resolution} {unroll_vae} {mark_step_after_vae} {gradient_accumulation_steps} --batch_size {args.batch_size} {save_model_epochs} {checkpointing_steps} {max_num_checkpoints} {resume_from_checkpoint} {resume_checkpoint_step}"
+    run_command = f"torchrun --nproc_per_node={WORLD_SIZE} {args.training_script_path} --model {args.model} --resolution {args.resolution} {gradient_accumulation_steps} --batch_size {args.batch_size} {save_model_epochs} {checkpointing_steps} {max_num_checkpoints} {resume_from_checkpoint} {resume_checkpoint_step}"
 
     # We use 10 parallel jobs because we expect up to 9 graphs: 8 without grad accum enabled, 9 with it enabled
     neuron_parallel_compile_command = "neuron_parallel_compile --num_parallel 10 " + run_command + " --epochs 1"
