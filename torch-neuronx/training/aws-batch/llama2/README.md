@@ -133,3 +133,6 @@ By default, this example is configured to run on 4 trn1.32xl instances. If you w
 Once the job is submitted, you can use `Amazon CloudWatch` Logs to monitor, store, and view all your logs from AWS Batch. Refer to [the documentation](https://docs.aws.amazon.com/batch/latest/userguide/batch-eks-cloudwatch-logs.html) for additional details and insights into the logging process. 
 
 The checkpoints will be stored in the predefined S3 location specified as `CHECKPOINT_SAVE_URI` in the config.txt file. By default, the checkpoint is saved once at the conclusion of training. However, you have the flexibility to alter this behavior by choosing to save the checkpoint after every N steps within the training loop. For more information on this, please refer [NxD Checkpointing Dev Guide](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/neuronx-distributed/tutorials/training_llama2_7b.html#checkpointing).
+
+#### 5. cleanup.sh
+After completing this tutorial, you can execute this cleanup script, which will handle the removal of resources generated during the tutorial. This includes the launch template, placement group, job definition, job queue, and compute environment. It's worth noting that AWS Batch automatically handles the cleanup of the ECS stack and Trainium instances, so there's no need to explicitly remove or stop them.
