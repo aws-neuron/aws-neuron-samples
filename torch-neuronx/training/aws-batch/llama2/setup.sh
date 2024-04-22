@@ -17,8 +17,7 @@ export CHECKPOINT_SAVE_URI
 # ECR repo and image details. You can locate the correct Neuron DLC image for 'training' on AWS DLC github page - https://github.com/aws/deep-learning-containers/blob/master/available_images.md#neuron-containers
 export BASE_IMAGE_REPO=763104351884.dkr.ecr.$REGION.amazonaws.com
 export BASE_IMAGE_NAME=pytorch-training-neuronx
-export BASE_IMAGE_TAG=1.13.1-neuronx-py310-sdk2.15.0-ubuntu20.04
-
+export BASE_IMAGE_TAG=1.13.1-neuronx-py310-sdk2.18.0-ubuntu20.04
 export ECS_AMI_NAME=/aws/service/ecs/optimized-ami/amazon-linux-2023/recommended/image_id
 export ECS_AMI=$(aws ssm get-parameter --region $REGION --name $ECS_AMI_NAME | jq -r .Parameter.Value)
 
@@ -37,6 +36,7 @@ Content-Type: multipart/mixed; boundary="==MYBOUNDARY=="
 Content-Type: text/cloud-boothook; charset="us-ascii"
 
 #!/bin/bash
+sudo yum install -y libibverbs-utils rdma-core-devel ibacm infiniband-diags-compat librdmacm-utils
 cloud-init-per once yum_wget yum install -y wget
 cloud-init-per once wget_efa wget -q --timeout=20 https://s3-us-west-2.amazonaws.com/aws-efa-installer/aws-efa-installer-latest.tar.gz -O /tmp/aws-efa-installer-latest.tar.gz
 cloud-init-per once tar_efa tar -xf /tmp/aws-efa-installer-latest.tar.gz -C /tmp
@@ -70,8 +70,8 @@ fi
 mv tokenizer.model ./data/
 
 # Downloading the sample files required for data pre-processing
-wget -q -P ./data/ https://raw.githubusercontent.com/aws-neuron/aws-neuron-samples/master/torch-neuronx/training/llama2/get_dataset.py
-wget -q -P ./data/ https://raw.githubusercontent.com/aws-neuron/aws-neuron-samples/master/torch-neuronx/training/llama2/tp_zero1_llama2_7b_hf_pretrain/config.json
+wget -q -P ./data/ https://raw.githubusercontent.com/aws-neuron/neuronx-distributed/master/examples/training/llama2/get_dataset.py
+wget -q -P ./data/ https://raw.githubusercontent.com/aws-neuron/neuronx-distributed/master/examples/training/llama2/tp_zero1_llama2_7b_hf_pretrain/config.json
 
 # Environment substitution is required files
 for template in ./templates/*.json; do envsubst < $template > ./build/`basename $template`; done
@@ -81,11 +81,11 @@ envsubst  '$DO_PRE_COMPILATION $NEURON_COMPILE_CACHE_URI $CHECKPOINT_SAVE_URI $T
 # Downloading the sample files required for Llama training
 pushd . > /dev/null
 cd ./docker/llama2
-wget -q https://raw.githubusercontent.com/aws-neuron/aws-neuron-samples/master/torch-neuronx/training/llama2/tp_zero1_llama2_7b_hf_pretrain/tp_zero1_llama2_7b_hf_pretrain.py
-wget -q https://raw.githubusercontent.com/aws-neuron/aws-neuron-samples/master/torch-neuronx/training/llama2/modeling_llama_nxd.py
-wget -q https://raw.githubusercontent.com/aws-neuron/aws-neuron-samples/master/torch-neuronx/training/llama2/adamw_fp32_optim_params.py
-wget -q https://raw.githubusercontent.com/aws-neuron/aws-neuron-samples/master/torch-neuronx/training/llama2/requirements.txt
-wget -q https://raw.githubusercontent.com/aws-neuron/aws-neuron-samples/master/torch-neuronx/training/llama2/tp_zero1_llama2_7b_hf_pretrain/config.json
+wget -q https://raw.githubusercontent.com/aws-neuron/neuronx-distributed/master/examples/training/llama2/tp_zero1_llama2_7b_hf_pretrain/tp_zero1_llama2_7b_hf_pretrain.py
+wget -q https://raw.githubusercontent.com/aws-neuron/neuronx-distributed/master/examples/training/llama2/tp_zero1_llama2_7b_hf_pretrain/logger.py
+wget -q https://raw.githubusercontent.com/aws-neuron/neuronx-distributed/master/examples/training/llama2/modeling_llama_nxd.py
+wget -q https://raw.githubusercontent.com/aws-neuron/neuronx-distributed/master/examples/training/llama2/requirements.txt
+wget -q https://raw.githubusercontent.com/aws-neuron/neuronx-distributed/master/examples/training/llama2/tp_zero1_llama2_7b_hf_pretrain/config.json
+wget -q https://raw.githubusercontent.com/aws-neuron/neuronx-distributed/master/examples/training/llama2/training_utils.py
 popd > /dev/null
-
 echo "Set up has been completed successfully."
