@@ -1,4 +1,4 @@
-transformers==4.27.3
+transformers==4.30.0
 accelerate==0.17
 datasets
 tensorboard==2.12.2
