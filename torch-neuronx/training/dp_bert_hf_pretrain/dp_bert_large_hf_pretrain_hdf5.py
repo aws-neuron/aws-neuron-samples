@@ -221,7 +221,7 @@ class pretraining_dataset(Dataset):
 
 
 def get_model(flags):
-    base_model = BertForPreTraining.from_pretrained('bert-large-uncased')
+    base_model = BertForPreTraining.from_pretrained('bert-large-uncased', force_download=True)
     # medium BERT size L12_A12_H768. Large BERT L24_A16_H1024 causes OOM on GPU V100
     my_config = copy.deepcopy(base_model.config)
     if flags.debug:
