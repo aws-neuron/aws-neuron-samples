@@ -2,3 +2,4 @@ transformers==4.27.3
 accelerate==0.17
 datasets
 tensorboard==2.12.2
+huggingface-hub<0.23
