@@ -60,7 +60,7 @@ if __name__ == '__main__':
     hg_dataset = DatasetDict({"train": train_dataset})
 
     ## Loading Hugging Face AutoTokenizer for the defined model
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, force_download=True)
 
     ds_encoded = hg_dataset.map(tokenize_and_encode, batched=True, remove_columns=["text"])
 
@@ -86,7 +86,7 @@ if __name__ == '__main__':
     train_device_loader = pl.MpDeviceLoader(train_dl, device)
 
     ## Loading Hugging Face pre-trained model for sequence classification for the defined model
-    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=3).to(device)
+    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=3, force_download=True).to(device)
 
     current_timestamp = strftime("%Y-%m-%d-%H-%M", gmtime())
 

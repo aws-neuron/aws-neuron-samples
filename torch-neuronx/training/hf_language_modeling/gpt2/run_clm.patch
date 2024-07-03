@@ -1,0 +1,27 @@
+diff --git a/examples/pytorch/language-modeling/run_clm.py b/examples/pytorch/language-modeling/run_clm.py
+index 3cf36ec9d..960b3a169 100755
+--- a/examples/pytorch/language-modeling/run_clm.py
++++ b/examples/pytorch/language-modeling/run_clm.py
+@@ -53,6 +53,22 @@ from transformers.trainer_utils import get_last_checkpoint
+ from transformers.utils import check_min_version, send_example_telemetry
+ from transformers.utils.versions import require_version
+ 
++from importlib.metadata import version
++
++if version("torch") >= "2.0":
++    import copy
++    import torch_xla.core.xla_model as xm
++    def mesh_reduce(tag, data, reduce_fn):
++        xm.rendezvous(tag)
++        xdatain = copy.deepcopy(data)
++        xdatain = xdatain.to("xla")
++        xdata = xm.all_gather(xdatain, pin_layout=False)
++        cpu_xdata = xdata.detach().to("cpu")
++        cpu_xdata_split = torch.split(cpu_xdata, xdatain.shape[0])
++        xldata = [x for x in cpu_xdata_split]
++        return reduce_fn(xldata)
++    xm.mesh_reduce = mesh_reduce
++
+ 
+ # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
+ check_min_version("4.27.0")
