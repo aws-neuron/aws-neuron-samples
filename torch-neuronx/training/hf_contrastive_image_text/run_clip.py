@@ -300,7 +300,8 @@ def main():
             cache_dir=model_args.cache_dir,
             keep_in_memory=False,
             data_dir=data_args.data_dir,
-            use_auth_token=True if model_args.use_auth_token else None
+            use_auth_token=True if model_args.use_auth_token else None,
+            trust_remote_code=True
         )
     else:
         data_files = {}
