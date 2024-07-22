@@ -49,6 +49,8 @@ The following samples are available for inference:
 | [Vision Perceiver](inference/hf_pretrained_perceiver_vision_inference.ipynb)         | Image Classification              | [vision-perceiver-conv](https://huggingface.co/deepmind/vision-perceiver-conv) |
 | [CLIP Base](inference/hf_pretrained_clip_base_inference_on_inf2.ipynb)         | Image Classification                | [clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) |
 | [CLIP Large](inference/hf_pretrained_clip_large_inference_on_inf2.ipynb)         | Image Classification               | [clip-vit-large-patch14](https://huggingface.co/openai/clip-vit-large-patch14) |
+| [Wav2Vec2 Conformer with Rotary Position Embeddings](inference/hf_pretrained_wav2vec2_conformer_rope_inference_on_inf2.ipynb)         | Automatic Speech Recognition              | [facebook/wav2vec2-conformer-rope-large-960h-ft](https://huggingface.co/facebook/wav2vec2-conformer-rope-large-960h-ft) |
+| [Wav2Vec2 Conformer with Relative Position Embeddings](inference/hf_pretrained_wav2vec2_conformer_relpos_inference_on_inf2.ipynb)         | Automatic Speech Recognition              | [facebook/wav2vec2-conformer-rel-pos-large-960h-ft](https://huggingface.co/facebook/wav2vec2-conformer-rel-pos-large-960h-ft) |
 
 The following samples are available for LLM tensor parallel inference:
 
