@@ -1,12 +1,12 @@
 graphviz
-tensorboard==2.6
-transformers==4.26.0
+tensorboard==2.14
+transformers==4.44.0
 evaluate
 pillow
 pytest
 accelerate
-datasets >= 1.8.0
-sentencepiece != 0.1.92
+datasets==2.19.1
+sentencepiece==0.2.0
 h5py
-requests
-huggingface-hub<0.23
+requests==2.31.0
+huggingface-hub==0.24.5
