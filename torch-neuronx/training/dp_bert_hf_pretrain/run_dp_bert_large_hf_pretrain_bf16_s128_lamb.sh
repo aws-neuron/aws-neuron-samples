@@ -53,7 +53,11 @@ if [ ! -z "$SLURM_NTASKS" ]; then
         CACHE_DIR=$HOME/neuron_cache/bert/`hostname`
         export NEURON_CC_FLAGS="--cache_dir=$CACHE_DIR"
     fi
-    export TRANSFORMERS_CACHE=$HOME/hf_cache/`hostname`/hub
+    export HF_HOME=/tmp/hf_cache/
+    mkdir -p $HF_HOME
+    if [ -e $HOME/.cache/huggingface ]; then
+        rsync -av $HOME/.cache/huggingface/ $HF_HOME
+    fi
     # HF ver > 4.22: Move cache ahead of time to prevent multiple workers moving at the same time
     python -c "import transformers.utils as utils; utils.move_cache()"
 fi
