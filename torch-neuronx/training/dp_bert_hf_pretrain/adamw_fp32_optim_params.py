@@ -98,7 +98,7 @@ class AdamW_FP32OptimParams(Optimizer):
                 if self.upcast_optim_states:
                     grad = p.grad.data.double()
                 else:
-                    grad = p.grad.data
+                    grad = p.grad.data.float()
 
                 if grad.is_sparse:
                     raise RuntimeError("Adam does not support sparse gradients, please consider SparseAdam instead")
