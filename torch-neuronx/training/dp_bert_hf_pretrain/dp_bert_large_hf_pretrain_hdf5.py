@@ -92,8 +92,6 @@ try:
 except ImportError:
     Metric = post_metrics = lambda *args, **kwargs: None
 
-PJRT_DEVICE = (os.environ.get("PJRT_DEVICE", None) == 'NEURON')
-
 class Throughput:
     def __init__(self, batch_size, world_size, grad_accum_usteps, moving_avg_window_size=10):
         self.seqs_per_iteration = batch_size * world_size * grad_accum_usteps
@@ -287,6 +285,8 @@ def train_bert_hdf5(flags):
     worker_init = WorkerInitObj(flags.seed)
     device = xm.xla_device()
     model = get_model(flags)
+    if not flags.enable_fp32 and not flags.enable_pt_autocast:
+        model.to(torch.bfloat16)
     model.to(device)
     model.tie_weights()
     # Additional tie needed
@@ -294,7 +294,7 @@ def train_bert_hdf5(flags):
     model.cls.predictions.decoder.bias = model.cls.predictions.bias
     model.train()
     model_dtype = get_dtype(model)
-    running_loss = torch.zeros(1, dtype=torch.double).to(device)
+    running_loss = torch.zeros(1, dtype=torch.float).to(device)
 
     param_optimizer = list(model.named_parameters())
     no_decay = ['bias', 'LayerNorm'] # gamma/beta are in LayerNorm.weight
@@ -315,6 +315,14 @@ def train_bert_hdf5(flags):
             raise ex
         print('Using AdamW with FP32 optimizer states')
         optimizer = AdamW_FP32OptimParams(optimizer_grouped_parameters, flags.lr)
+    elif optimizer_type == 'AdamW_FP32ParamsCopy':
+        try:
+            from adamw_fp32_params_copy import AdamW_FP32ParamsCopy
+        except ImportError as ex:
+            print(f'{optimizer_type} selected but no AdamW with FP32 parameters copy implementation is available. Please make sure adamw_fp32_params_copy.py exists in the same dir.')
+            raise ex
+        print('Using AdamW with FP32 copy of weights')
+        optimizer = AdamW_FP32ParamsCopy(optimizer_grouped_parameters, flags.lr)
     elif optimizer_type == 'LAMB':
         try:
             from lamb import Lamb
@@ -617,7 +625,9 @@ def train_bert_hdf5(flags):
 
 
 def init_process_group():
-    if PJRT_DEVICE:
+    if is_pt21_plus:
+        dist.init_process_group('xla', init_method='xla://')
+    elif is_pt20:
         import torch_xla.experimental.pjrt_backend
         import torch_xla.experimental.pjrt as pjrt
         dist.init_process_group('xla', init_method='pjrt://')
@@ -641,7 +651,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_dir', type=str, default='~/examples_datasets/bert_pretrain_wikicorpus_tokenized_hdf5_seqlen128/', help="Pre-tokenized HDF5 dataset directory.")
     parser.add_argument('--output_dir', type=str, default='./output', help="Directory for checkpoints and logs.")
     parser.add_argument('--metrics_file', type=str, default='results.json', help="training metrics results file")
-    parser.add_argument('--optimizer', type=str, default='AdamW_FP32OptimParams', choices=['AdamW', 'AdamW_FP32OptimParams', 'LAMB'], help="choose optimizer type: AdamW_FP32OptimParams (default, optimizer params in high precision), AdamW, LAMB")
+    parser.add_argument('--optimizer', type=str, default='AdamW_FP32OptimParams', choices=['AdamW', 'AdamW_FP32OptimParams', 'AdamW_FP32ParamsCopy', 'LAMB'], help="choose optimizer type: AdamW_FP32OptimParams (default, optimizer params in high precision), AdamW, LAMB")
     parser.add_argument('--batch_size', type=int, default=8, help="Worker batch size.")
     parser.add_argument('--max_steps', type=int, default=28125, help="Maximum total accumulation-steps to run.")
     parser.add_argument('--steps_this_run', type=int, default=-1, help="Exit early at <value> steps and not go to max_steps. -1 to mean no early exit.")
@@ -659,6 +669,7 @@ if __name__ == '__main__':
     parser.add_argument("--grad_accum_usteps", type=int, default=64, help="Gradient accumulation micro-steps (an accumulation-step has <value> micro-steps.")
     parser.add_argument('--minimal_ckpt', default=False, action='store_true', help="When specified, don't store optimizer/lr-schedule states in checkpoints.")
     parser.add_argument('--enable_pt_autocast', action="store_true", help="Enable pytorch autocast.")
+    parser.add_argument('--enable_fp32', action="store_true", help="Enable full fp32 training. Else, cast model to bfloat16.")
     parser.add_argument('--phase1_end_step', type=int, default=28125, help="Number of training steps in Phase1 - seq len 128")
     parser.add_argument('--phase2', default=False, action='store_true', help="Whether to train with seq len 512")
     parser.add_argument('--print_grad_norm', default=False, action='store_true', help="Whether to print grad norm")
@@ -673,9 +684,8 @@ if __name__ == '__main__':
     if args.steps_this_run < 0:
         args.steps_this_run = args.max_steps
 
-    if args.enable_pt_autocast:
+    if not args.enable_fp32 and args.optimizer != "AdamW_FP32ParamsCopy" and not "NEURON_RT_STOCHASTIC_ROUNDING_EN" in os.environ:
         os.environ["NEURON_RT_STOCHASTIC_ROUNDING_EN"] = "1"
-
 
     # Enable HLO snapshot dump before device init (first use of 'xla' device)
     # Will do more fine-grained enablement in the training function  to track global step
