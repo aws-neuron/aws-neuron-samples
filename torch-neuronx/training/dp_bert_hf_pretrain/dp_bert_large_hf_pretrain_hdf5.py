@@ -76,10 +76,7 @@ version_tuple = tuple(map(int, __version__.split(".")[:2]))
 is_pt21_plus = version_tuple >= (2,1)
 is_pt20 = version_tuple == (2,0)
 
-os.environ["NEURON_CC_FLAGS"] =  os.environ.get('NEURON_CC_FLAGS', '') + " --model-type=transformer"
-
-# For PT autocast.
-torch.cuda.is_bf16_supported = lambda: True
+os.environ["NEURON_CC_FLAGS"] =  os.environ.get('NEURON_CC_FLAGS', '') + " --model-type=transformer --retry_failed_compilation "
 
 # Workaround for NaNs seen with transformers version >= 4.21.0
 # https://github.com/aws-neuron/aws-neuron-sdk/issues/593
@@ -394,7 +391,7 @@ def train_bert_hdf5(flags):
         for i, data in enumerate(train_loader):
             training_ustep += 1
             input_ids, segment_ids, input_mask, masked_lm_labels, next_sentence_labels = data
-            with torch.autocast(enabled=flags.enable_pt_autocast, dtype=torch.bfloat16, device_type='cuda'):
+            with torch.autocast(enabled=flags.enable_pt_autocast, dtype=torch.bfloat16, device_type='xla'):
                 outputs = model(input_ids=input_ids,
                                 attention_mask=input_mask,
                                 token_type_ids=segment_ids,
