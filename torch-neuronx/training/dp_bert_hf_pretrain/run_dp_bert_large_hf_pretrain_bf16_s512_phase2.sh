@@ -26,6 +26,11 @@ if [ "$1" == "amp" ]; then
     BATCH_SIZE=2
     GRAD_ACCUM_USTEPS=512
     ADD_ARGS="--enable_pt_autocast"
+elif [ "$1" == "fp32paramscopy" ]; then
+    echo "Enable BF16 with FP32 copy of weights"
+    BATCH_SIZE=2
+    GRAD_ACCUM_USTEPS=512
+    ADD_ARGS="--optimizer=AdamW_FP32ParamsCopy"
 elif [ "$1" == "fp32" ]; then
     echo "Enable Full FP32"
     BATCH_SIZE=1
