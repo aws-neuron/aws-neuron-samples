@@ -26,6 +26,7 @@
 # - Added logger class to print log and also log to TensorBoard database
 
 import os
+import re
 
 import torch
 import glob
@@ -236,11 +237,11 @@ def get_model(flags):
     my_model = BertForPreTraining(my_config)
     return my_model
 
-def extract_mfu(num_layers, hidden_size, sequence_len, batch_size, average_throughput, world_size):
+def extract_mfu(num_layers, hidden_size, sequence_len, batch_size, average_throughput, world_size, model_dtype):
     flops_per_seq = 12 * num_layers * hidden_size * sequence_len * (6 * hidden_size + sequence_len)
     tflops_per_seq = flops_per_seq / 10**12
     tflops_per_sec_per_worker = tflops_per_seq * average_throughput/world_size
-    if '--auto-cast=none' in os.getenv('NEURON_CC_FLAGS', default=''):
+    if '--auto-cast=none' in os.getenv('NEURON_CC_FLAGS', default='') and model_dtype == 'torch.float32':
         hw_tflops_per_worker = 760/32 
     else:
         hw_tflops_per_worker = 3040/32 
@@ -523,7 +524,19 @@ def train_bert_hdf5(flags):
         train_device_loader = pl.MpDeviceLoader(train_dataloader, device)
         if is_root:
             parameters.update(
-                {"Sequence length": train_dataloader.dataset.sequence_length}
+                {
+                    "Sequence length": train_dataloader.dataset.sequence_length,
+                    "Model": 'BERT',
+                    "TestType": "Training",
+                    "ModelCategory": "NLP",
+                    "Vocab size": model.config.vocab_size,
+                    "Number of layers": len(model.bert.encoder.layer),
+                    "Hidden size": model.config.hidden_size,
+                    "Number of heads": model.config.num_attention_heads,
+                    "Model Size": str(model.num_parameters()//1000000) + 'M',
+                    "Batch Size": flags.batch_size,
+                    "Intermediate Size": model.config.intermediate_size,
+                }
             )
 
         # use DP dataloader
@@ -547,7 +560,7 @@ def train_bert_hdf5(flags):
                     Metric("Loss", final_loss, units="", additional=additional_data),
                     Metric("Throughput", logger.throughputs[-1], units="seq/s", additional=additional_data)
                 ]
-                post_metrics(metric_data, parameters=parameters)
+                post_metrics(metric_data, parameters=parameters, report_v1=False, report_v2=True)
 
                 if (f % flags.shards_per_ckpt == 0) or (global_step >= flags.steps_this_run):
                     if flags.phase2:
@@ -587,12 +600,20 @@ def train_bert_hdf5(flags):
                     if os.path.exists(compile_time_file):
                         with open(compile_time_file, "r") as f:
                             compile_time = float(f.readline())
+                    elif os.path.exists("slurm-wrap-1.txt"):      
+                        time_for_workers = []    
+                        with open('slurm-wrap-1.txt', 'r') as file:
+                            print('collecting compile_time for pcluster workers log')
+                            for w in file:      
+                                if re.search('compilation_time', w):
+                                    time_for_workers.append(float(w.split(':')[1].strip()))
+                        compile_time = max(time_for_workers)    
                     # record aggregate & final statistics in the metrics file
                     additional_data = {
                         "Epoch": epoch, "Global step": global_step, "Microstep": training_ustep
                     }
                     average_throughput = round(sum(logger.throughputs)/len(logger.throughputs), 4)
-                    model_flops_utilization = extract_mfu(len(model.bert.encoder.layer), model.bert.config.hidden_size, train_dataloader.dataset.sequence_length, flags.batch_size, average_throughput, world_size)
+                    model_flops_utilization = extract_mfu(len(model.bert.encoder.layer), model.bert.config.hidden_size, train_dataloader.dataset.sequence_length, flags.batch_size, average_throughput, world_size, model_dtype)
                     metric_data = [
                         Metric("FinalLoss", final_loss, units="", additional=additional_data),
                         Metric("TimeToTrain", round(time_diff/60, 4), units="minutes", additional=additional_data),
@@ -604,12 +625,12 @@ def train_bert_hdf5(flags):
                         derived_expected_throughput = (0.95*flags.expected_average_throughput)
                         metric_data.append(
                             Metric("AverageThroughput", average_throughput, units="seq/s", expected=flags.expected_average_throughput, derived=derived_expected_throughput, additional=additional_data))
-                        post_metrics(metric_data, parameters=parameters)
+                        post_metrics(metric_data, parameters=parameters, report_v1=False, report_v2=True)
                         assert(average_throughput >= derived_expected_throughput), "Average throughput :{} is  below derived expected threshold: {}".format(average_throughput, derived_expected_throughput)
                     else:
                         metric_data.append(
                             Metric("AverageThroughput", average_throughput, units="seq/s", additional=additional_data))
-                        post_metrics(metric_data, parameters=parameters)
+                        post_metrics(metric_data, parameters=parameters, report_v1=False, report_v2=True)
                 return
             del train_device_loader
             del train_dataloader
