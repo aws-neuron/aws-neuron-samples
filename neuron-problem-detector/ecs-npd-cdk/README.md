@@ -1,9 +1,12 @@
+# Overview
 
-# Welcome to your CDK Python project!
+This project contains CDK code to provision :
 
-This is a blank project for CDK development with Python.
+* An ECS Cluster and one Inf2.xlarge EC2 instance joining the cluster. 
+* An ECS Task Definition for Neruon Problem Detector and Recovery
+* An ECS Service that run the containers as Daemon in all instances
+* Related IAM roles and log groups  
 
-The `cdk.json` file tells the CDK Toolkit how to execute your app.
 
 This project is set up like a standard Python project.  The initialization
 process also creates a virtualenv within this project, stored under the `.venv`
@@ -12,9 +15,15 @@ directory.  To create the virtualenv it assumes that there is a `python3`
 package. If for any reason the automatic creation of the virtualenv fails,
 you can create the virtualenv manually.
 
+The `cdk.json` file tells the CDK Toolkit how to execute your app.
+
 ## Pre-requisites
-You will need `python3` and `cdk` utility installed on your machine. 
-To install `cdk` follow the instructions [here](https://docs.aws.amazon.com/cdk/v2/guide/getting_started.html)
+Before you start, ensure that you have installed the latest version of the following tools on your machine:
+
+1. [aws cli](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+2. [aws cdk](https://docs.aws.amazon.com/cdk/v2/guide/getting_started.html)
+3. [Session Manager Plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html)
+
 
 ## Environment Setup 
 To manually create a virtualenv on MacOS and Linux:
@@ -60,7 +69,7 @@ Deploy the stack in your AWS environment
 cdk deploy [--profile <profile name>]
 ```
 
-
+## Optional
 To add additional dependencies, for example other CDK libraries, just add
 them to your `setup.py` file and rerun the `pip install -r requirements.txt`
 command.
@@ -73,4 +82,4 @@ command.
  * `cdk diff`        compare deployed stack with current state
  * `cdk docs`        open CDK documentation
 
-Enjoy!
+
