@@ -9,19 +9,23 @@ from aws_cdk import (
     aws_autoscaling as autoscaling,
 )
 from constructs import Construct
+import json 
+
 
 
 class NeuronProblemDetectorStack(Stack):
 
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
-
+        with open('ecs_task_definition.json', 'r') as f:
+            ecs_task_definition = json.load(f)
+            
         vpc = ec2.Vpc(self, "NeuronProblemDetectorVPC", max_azs=2)
 
         ecs_cluster = ecs.Cluster(self, "NeuronProblemDetectorCluster", vpc=vpc)
 
         ecs_cluster.add_capacity(
-            id="NeruonAutoScalingGroupCapacity",
+            id="NeuronAutoScalingGroupCapacity",
             machine_image=ecs.EcsOptimizedImage.amazon_linux2(
                 ecs.AmiHardwareType.NEURON
             ),
@@ -91,8 +95,8 @@ class NeuronProblemDetectorStack(Stack):
             "NeuronNpdAndRecoveryTaskDef",
             family="neuron-npd-and-recovery",
             network_mode=ecs.NetworkMode.AWS_VPC,
-            cpu="1024",
-            memory_mib="3072",
+            cpu=ecs_task_definition["cpu"],
+            memory_mib=ecs_task_definition["memory"],
             compatibility=ecs.Compatibility.EC2,
             execution_role=task_execution_role,
             task_role=task_role
@@ -100,8 +104,8 @@ class NeuronProblemDetectorStack(Stack):
 
         # Create the device mapping
         device_mapping = ecs.Device(
-            host_path="/dev/kmsg",
-            container_path="/dev/kmsg",
+            host_path=ecs_task_definition["containerDefinitions"][0]["linuxParameters"]["devices"][0]["hostPath"],
+            container_path=ecs_task_definition["containerDefinitions"][0]["linuxParameters"]["devices"][0]["containerPath"],
             permissions=[ecs.DevicePermission.READ, ecs.DevicePermission.WRITE],
         )
 
@@ -113,21 +117,19 @@ class NeuronProblemDetectorStack(Stack):
         linux_parameters.add_devices(device_mapping)
 
         npd_container = task_definition.add_container(
-            "npd",
+            ecs_task_definition["containerDefinitions"][0]["name"],
             image=ecs.ContainerImage.from_registry(
-                "registry.k8s.io/node-problem-detector/node-problem-detector:v0.8.19"
+                ecs_task_definition["containerDefinitions"][0]["image"]
             ),
-            entry_point=["/bin/sh", "-c"],
-            command=[
-                'echo \'{"plugin":"kmsg","logPath":"/dev/kmsg","lookback":"5m","bufferSize":10,"source":"kernel-monitor","conditions":[{"type":"NeuronHealth","reason":"NeuronHasNoError","message":"Neuronhasnoerror"}],"rules":[{"type":"permanent","condition":"NeuronHealth","reason":"NeuronHasError_SRAM_UNCORRECTABLE_ERROR","pattern":".*NEURON_HW_ERR=SRAM_UNCORRECTABLE_ERROR.*"},{"type":"permanent","condition":"NeuronHealth","reason":"NeuronHasError_NC_UNCORRECTABLE_ERROR","pattern":".*NEURON_HW_ERR=NC_UNCORRECTABLE_ERROR.*"},{"type":"permanent","condition":"NeuronHealth","reason":"NeuronHasError_HBM_UNCORRECTABLE_ERROR","pattern":".*NEURON_HW_ERR=HBM_UNCORRECTABLE_ERROR.*"},{"type":"permanent","condition":"NeuronHealth","reason":"NeuronHasError_DMA_ERROR","pattern":".*NEURON_HW_ERR=DMA_ERROR.*"},{"type":"permanent","condition":"NeuronHealth","reason":"NeuronHasError_HANG_ON_COLLECTIVES","pattern":".*NEURON_HW_ERR=HANG_ON_COLLECTIVES.*"}]}\' > /config/kernel-monitor.json && /node-problem-detector --v=2 --logtostderr --enable-k8s-exporter=false --config.system-log-monitor=/config/kernel-monitor.json'
-            ],
+            entry_point=ecs_task_definition["containerDefinitions"][0]["entrypoint"],
+            command=ecs_task_definition["containerDefinitions"][0]["command"],
             privileged=True,
             logging=ecs.AwsLogDriver(
-                stream_prefix="ecs",
+                stream_prefix=ecs_task_definition["containerDefinitions"][0]["logConfiguration"]["options"]["awslogs-stream-prefix"],
                 log_group=logs.LogGroup(
                     self,
                     "NpdLogGroup",
-                    log_group_name="/ecs/npd",
+                    log_group_name=ecs_task_definition["containerDefinitions"][0]["logConfiguration"]["options"]["awslogs-group"],
                     retention=logs.RetentionDays.ONE_WEEK,
                 ),
             ),
@@ -136,29 +138,31 @@ class NeuronProblemDetectorStack(Stack):
 
         npd_container.add_port_mappings(
             ecs.PortMapping(
-                name="npd-80-tcp",
-                container_port=80,
-                host_port=80,
+                name=ecs_task_definition["containerDefinitions"][0]["portMappings"][0]["name"],
+                container_port=ecs_task_definition["containerDefinitions"][0]["portMappings"][0]["containerPort"],
+                host_port=ecs_task_definition["containerDefinitions"][0]["portMappings"][0]["hostPort"],
                 protocol=ecs.Protocol.TCP,
                 app_protocol=ecs.AppProtocol.http,
             )
         )
 
         recovery_container = task_definition.add_container(
-            "recovery",
+            ecs_task_definition["containerDefinitions"][1]["name"],
             image=ecs.ContainerImage.from_registry(
-                "public.ecr.aws/neuron/neuron-node-recovery:1.2.0"
+                ecs_task_definition["containerDefinitions"][1]["image"]
             ),
-            entry_point=["/bin/sh", "-c"],
-            command=["python scripts/check-health.py"],
-            environment={"ENABLE_RECOVERY": "true"},
-            readonly_root_filesystem=True, 
+            entry_point=ecs_task_definition["containerDefinitions"][1]["entryPoint"],
+            command=ecs_task_definition["containerDefinitions"][1]["command"],
+            environment={
+                ecs_task_definition["containerDefinitions"][1]["environment"][0]["name"]: ecs_task_definition["containerDefinitions"][1]["environment"][0]["value"]
+            },
+            readonly_root_filesystem=ecs_task_definition["containerDefinitions"][1]["readonlyRootFilesystem"], 
             logging=ecs.AwsLogDriver(
-                stream_prefix="ecs",
+                stream_prefix=ecs_task_definition["containerDefinitions"][1]["logConfiguration"]["options"]["awslogs-stream-prefix"],
                 log_group=logs.LogGroup(
                     self,
                     "RecoveryLogGroup",
-                    log_group_name="/ecs/recovery",
+                    log_group_name=ecs_task_definition["containerDefinitions"][1]["logConfiguration"]["options"]["awslogs-group"],
                     retention=logs.RetentionDays.ONE_WEEK,
                 ),
             ),

@@ -3,7 +3,7 @@
 This project contains CDK code to provision :
 
 * An ECS Cluster and one Inf2.xlarge EC2 instance joining the cluster. 
-* An ECS Task Definition for Neruon Problem Detector and Recovery
+* An ECS Task Definition for Neuron Problem Detector and Recovery
 * An ECS Service that run the containers as Daemon in all instances
 * Related IAM roles and log groups  
 
