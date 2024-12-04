@@ -875,7 +875,6 @@ Resources:
         - Ref: NeuronProblemDetectorTaskRole673752FB
     Metadata:
       aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorTaskRole/DefaultPolicy/Resource
-  NeuronNpdAndRecoveryTaskDef7591F251:
     Type: AWS::ECS::TaskDefinition
     Properties:
       ContainerDefinitions:
@@ -986,8 +985,6 @@ Resources:
             - Ref: NeuronProblemDetectorVPCPrivateSubnet1Subnet708A0901
             - Ref: NeuronProblemDetectorVPCPrivateSubnet2Subnet3B7C3437
       SchedulingStrategy: DAEMON
-      TaskDefinition:
-        Ref: NeuronNpdAndRecoveryTaskDef7591F251
     DependsOn:
       - NeuronProblemDetectorTaskRoleDefaultPolicyCFCDEF04
       - NeuronProblemDetectorTaskRole673752FB

@@ -9,9 +9,7 @@
                 {
                     "name": "npd-80-tcp",
                     "containerPort": 80,
-                    "hostPort": 80,
-                    "protocol": "tcp",
-                    "appProtocol": "http"
+                    "hostPort": 80
                 }
             ],
             "essential": true,
@@ -43,7 +41,6 @@
                 "options": {
                     "awslogs-group": "/ecs/npd",
                     "awslogs-create-group": "true",
-                    "awslogs-region": "us-west-2",
                     "awslogs-stream-prefix": "ecs"
                 },
                 "secretOptions": []
@@ -77,20 +74,12 @@
                 "options": {
                     "awslogs-create-group": "true",
                     "awslogs-group": "/ecs/recovery",
-                    "awslogs-region": "us-west-2",
                     "awslogs-stream-prefix": "ecs"
                 }
             },
             "systemControls": []
         }
     ],
-    "requiresCompatibilities": [
-        "EC2"
-    ],
     "cpu": "1024",
-    "memory": "3072",
-    "runtimePlatform": {
-        "cpuArchitecture": "X86_64",
-        "operatingSystemFamily": "LINUX"
-    }
+    "memory": "3072"
 }

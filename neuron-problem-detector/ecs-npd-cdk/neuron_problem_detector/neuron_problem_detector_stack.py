@@ -17,7 +17,7 @@ class NeuronProblemDetectorStack(Stack):
 
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
-        with open('ecs_task_definition.json', 'r') as f:
+        with open('neuron_problem_detector/ecs_task_definition.json', 'r') as f:
             ecs_task_definition = json.load(f)
             
         vpc = ec2.Vpc(self, "NeuronProblemDetectorVPC", max_azs=2)
@@ -121,7 +121,7 @@ class NeuronProblemDetectorStack(Stack):
             image=ecs.ContainerImage.from_registry(
                 ecs_task_definition["containerDefinitions"][0]["image"]
             ),
-            entry_point=ecs_task_definition["containerDefinitions"][0]["entrypoint"],
+            entry_point=ecs_task_definition["containerDefinitions"][0]["entryPoint"],
             command=ecs_task_definition["containerDefinitions"][0]["command"],
             privileged=True,
             logging=ecs.AwsLogDriver(

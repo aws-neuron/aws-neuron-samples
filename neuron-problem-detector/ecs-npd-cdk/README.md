@@ -52,12 +52,12 @@ $ pip install -r requirements.txt
 ```
 
 ## Synthesize CloudFormation template
+It is assumed that you have authenticated successfully to connect to your AWS environment. 
 At this point you can now synthesize the CloudFormation template for this code.
 
 ```
 $ cdk synth
 ```
-It is assumed that you have authenticated successfully to connect to your AWS environment. 
 
 Perform bootstrap function with the following command.
 ```
@@ -67,6 +67,21 @@ Deploy the stack in your AWS environment
 
 ```
 cdk deploy [--profile <profile name>]
+```
+
+## Cleanup Instructions
+
+Destroy the stack in your AWS environment
+
+```
+cdk destroy [--profile <profile name>]
+```
+
+Delete the following log groups in cloudwatch
+
+```
+/ecs/recovery
+/ecs/npd
 ```
 
 ## Optional
