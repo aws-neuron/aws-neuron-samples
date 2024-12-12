@@ -38,7 +38,14 @@ fi
 
 if [ -e /opt/aws/neuron/bin/neuron-ls ]; then
     NUM_DEVICES=`/opt/aws/neuron/bin/neuron-ls -j | jq '. | length'`
-    NC_PER_DEVICE=`/opt/aws/neuron/bin/neuron-ls -j | jq '.[0].nc_count'`
+    NC_PER_DEVICE=`/opt/aws/neuron/bin/neuron-ls -j | jq '.[0].lnc_count'`
+    if [ -z "$NC_PER_DEVICE" ] || [ "$NC_PER_DEVICE" == "null" ]; then
+        NC_PER_DEVICE=`/opt/aws/neuron/bin/neuron-ls -j | jq '.[0].nc_count'`
+        if [[ "$NC_PER_DEVICE" == "8" || "$NC_PER_DEVICE" == "128" ]]; then
+            echo " Running on Trn2 device"
+            let NC_PER_DEVICE=$NC_PER_DEVICE/2
+        fi
+    fi
     let NUM_NEURONCORES=$NUM_DEVICES*$NC_PER_DEVICE
     echo "Found $NUM_NEURONCORES NeuronCores"
 else

@@ -71,13 +71,14 @@ import inspect
 import requests
 import gc
 
-
 from torch_xla import __version__
 version_tuple = tuple(map(int, __version__.split(".")[:2]))
 is_pt21_plus = version_tuple >= (2,1)
 is_pt20 = version_tuple == (2,0)
 
 os.environ["NEURON_CC_FLAGS"] =  os.environ.get('NEURON_CC_FLAGS', '') + " --model-type=transformer --retry_failed_compilation "
+
+xla_downcast = os.environ.get('XLA_DOWNCAST_BF16', '0') == '1'
 
 # Workaround for NaNs seen with transformers version >= 4.21.0
 # https://github.com/aws-neuron/aws-neuron-sdk/issues/593
@@ -283,7 +284,7 @@ def train_bert_hdf5(flags):
     worker_init = WorkerInitObj(flags.seed)
     device = xm.xla_device()
     model = get_model(flags)
-    if not flags.enable_fp32 and not flags.enable_pt_autocast:
+    if not flags.enable_fp32 and not flags.enable_pt_autocast and not xla_downcast:
         model.to(torch.bfloat16)
     model.to(device)
     model.tie_weights()
@@ -292,7 +293,10 @@ def train_bert_hdf5(flags):
     model.cls.predictions.decoder.bias = model.cls.predictions.bias
     model.train()
     model_dtype = get_dtype(model)
-    running_loss = torch.zeros(1, dtype=torch.float).to(device)
+    if xla_downcast:
+        running_loss = torch.zeros(1, dtype=torch.double).to(device)
+    else:
+        running_loss = torch.zeros(1, dtype=torch.float).to(device)
 
     param_optimizer = list(model.named_parameters())
     no_decay = ['bias', 'LayerNorm'] # gamma/beta are in LayerNorm.weight
@@ -498,6 +502,9 @@ def train_bert_hdf5(flags):
     thread_pool = ThreadPoolExecutor(1)
     chkpt_files = deque([])
 
+    if version_tuple >= (2,5) and flags.torch_xla_compile:
+        train_loop_fn = torch_xla.compile(train_loop_fn)
+
     assert(os.path.exists(os.path.expanduser(flags.data_dir))), "ERROR: Data directory {} doesn't exist!".format(flags.data_dir)
     while True:
         if flags.resume_ckpt and not flags.phase2:
@@ -696,6 +703,7 @@ if __name__ == '__main__':
     parser.add_argument("--snapshot_step_list", default=None, help="comma separated list of steps to take snapshot; also used to enable snapshotting with dropout disabled (WARNNG: can take lots of disk space, esp with grad accum.)")
     parser.add_argument("--snapshot_rank_list", default="0", help="comma separated list of ranks to take snapshot, or 'all' for all ranks (WARNNG: can take lots of disk space, esp with grad accum.)")
     parser.add_argument("--snapshot_dump_dir", default="./snapshots", help="directory to dump snapshots; snapshot_step_list must be specified")
+    parser.add_argument('--torch_xla_compile', default=False, action='store_true', help="Run torch_xla.compile on the training script function.")
 
     args = parser.parse_args(sys.argv[1:])
 
