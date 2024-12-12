@@ -42,7 +42,16 @@ fi
 
 if [ -e /opt/aws/neuron/bin/neuron-ls ]; then
     NUM_DEVICES=`/opt/aws/neuron/bin/neuron-ls -j | jq '. | length'`
-    NC_PER_DEVICE=`/opt/aws/neuron/bin/neuron-ls -j | jq '.[0].nc_count'`
+    NC_PER_DEVICE=`/opt/aws/neuron/bin/neuron-ls -j | jq '.[0].lnc_count'`
+    echo "Found logical $NC_PER_DEVICE nc per device"
+
+    if [ -z "$NC_PER_DEVICE" ] || [ "$NC_PER_DEVICE" == "null" ]; then
+        NC_PER_DEVICE=`/opt/aws/neuron/bin/neuron-ls -j | jq '.[0].nc_count'`
+        if [[ "$NC_PER_DEVICE" == "8" || "$NC_PER_DEVICE" == "128" ]]; then
+            echo " Running on Trn2 device"
+            let NC_PER_DEVICE=$NC_PER_DEVICE/2
+        fi
+    fi
     let NUM_NEURONCORES=$NUM_DEVICES*$NC_PER_DEVICE
     echo "Found $NUM_NEURONCORES NeuronCores"
 else
@@ -52,7 +61,6 @@ fi
 DISTRIBUTED_ARGS="--nproc_per_node $NUM_NEURONCORES"
 OUTPUT_DIR=output
 LOG_FILE=log_ph1_bf16
-expected_average_throughput=0.0
 if [ ! -z "$NEURON_EXTRACT_GRAPHS_ONLY" ]; then
    LOG_FILE=${LOG_FILE}_compile
 fi
@@ -101,7 +109,7 @@ mkdir -p $OUTPUT_DIR
 if [ -z "$json" ]; then json="$OUTPUT_DIR/results.json" && rm -f $json; fi
 
 sudo sysctl -w net.ipv4.ip_local_reserved_ports=48620 || exit 1
-torchrun $DISTRIBUTED_ARGS dp_bert_large_hf_pretrain_hdf5.py $ADD_ARGS --output_dir $OUTPUT_DIR --steps_this_run $steps_this_run --metrics_file $json --batch_size=$BATCH_SIZE --grad_accum_usteps=$GRAD_ACCUM_USTEPS --expected_average_throughput $expected_average_throughput |& tee $OUTPUT_DIR/$LOG_FILE
+torchrun $DISTRIBUTED_ARGS dp_bert_large_hf_pretrain_hdf5.py $ADD_ARGS --output_dir $OUTPUT_DIR --steps_this_run $steps_this_run --metrics_file $json --batch_size=$BATCH_SIZE --grad_accum_usteps=$GRAD_ACCUM_USTEPS |& tee $OUTPUT_DIR/$LOG_FILE
 
 ret_val=${PIPESTATUS[0]}
 echo $ret_val
