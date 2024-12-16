@@ -1,0 +1,1122 @@
+Resources:
+  NeuronProblemDetectorVPC5F617726:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: NeuronProblemDetectorStack/NeuronProblemDetectorVPC
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/Resource
+  NeuronProblemDetectorVPCPublicSubnet1Subnet842914BF:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: ""
+      CidrBlock: 10.0.0.0/18
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: aws-cdk:subnet-name
+          Value: Public
+        - Key: aws-cdk:subnet-type
+          Value: Public
+        - Key: Name
+          Value: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PublicSubnet1
+      VpcId:
+        Ref: NeuronProblemDetectorVPC5F617726
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PublicSubnet1/Subnet
+  NeuronProblemDetectorVPCPublicSubnet1RouteTableC098CD6A:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PublicSubnet1
+      VpcId:
+        Ref: NeuronProblemDetectorVPC5F617726
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PublicSubnet1/RouteTable
+  NeuronProblemDetectorVPCPublicSubnet1RouteTableAssociation9EC2AFC5:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: NeuronProblemDetectorVPCPublicSubnet1RouteTableC098CD6A
+      SubnetId:
+        Ref: NeuronProblemDetectorVPCPublicSubnet1Subnet842914BF
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PublicSubnet1/RouteTableAssociation
+  NeuronProblemDetectorVPCPublicSubnet1DefaultRoute5C4F3954:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: NeuronProblemDetectorVPCIGW3EC7DAA5
+      RouteTableId:
+        Ref: NeuronProblemDetectorVPCPublicSubnet1RouteTableC098CD6A
+    DependsOn:
+      - NeuronProblemDetectorVPCVPCGW5182937C
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PublicSubnet1/DefaultRoute
+  NeuronProblemDetectorVPCPublicSubnet1EIP71A9859B:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PublicSubnet1
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PublicSubnet1/EIP
+  NeuronProblemDetectorVPCPublicSubnet1NATGateway34AE13E8:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+          - NeuronProblemDetectorVPCPublicSubnet1EIP71A9859B
+          - AllocationId
+      SubnetId:
+        Ref: NeuronProblemDetectorVPCPublicSubnet1Subnet842914BF
+      Tags:
+        - Key: Name
+          Value: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PublicSubnet1
+    DependsOn:
+      - NeuronProblemDetectorVPCPublicSubnet1DefaultRoute5C4F3954
+      - NeuronProblemDetectorVPCPublicSubnet1RouteTableAssociation9EC2AFC5
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PublicSubnet1/NATGateway
+  NeuronProblemDetectorVPCPublicSubnet2Subnet53E01F76:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: ""
+      CidrBlock: 10.0.64.0/18
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: aws-cdk:subnet-name
+          Value: Public
+        - Key: aws-cdk:subnet-type
+          Value: Public
+        - Key: Name
+          Value: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PublicSubnet2
+      VpcId:
+        Ref: NeuronProblemDetectorVPC5F617726
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PublicSubnet2/Subnet
+  NeuronProblemDetectorVPCPublicSubnet2RouteTable01829BCC:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PublicSubnet2
+      VpcId:
+        Ref: NeuronProblemDetectorVPC5F617726
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PublicSubnet2/RouteTable
+  NeuronProblemDetectorVPCPublicSubnet2RouteTableAssociation9AFE0962:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: NeuronProblemDetectorVPCPublicSubnet2RouteTable01829BCC
+      SubnetId:
+        Ref: NeuronProblemDetectorVPCPublicSubnet2Subnet53E01F76
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PublicSubnet2/RouteTableAssociation
+  NeuronProblemDetectorVPCPublicSubnet2DefaultRoute80B8BD8F:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: NeuronProblemDetectorVPCIGW3EC7DAA5
+      RouteTableId:
+        Ref: NeuronProblemDetectorVPCPublicSubnet2RouteTable01829BCC
+    DependsOn:
+      - NeuronProblemDetectorVPCVPCGW5182937C
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PublicSubnet2/DefaultRoute
+  NeuronProblemDetectorVPCPublicSubnet2EIPEDE2DCF3:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PublicSubnet2
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PublicSubnet2/EIP
+  NeuronProblemDetectorVPCPublicSubnet2NATGateway475CF308:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+          - NeuronProblemDetectorVPCPublicSubnet2EIPEDE2DCF3
+          - AllocationId
+      SubnetId:
+        Ref: NeuronProblemDetectorVPCPublicSubnet2Subnet53E01F76
+      Tags:
+        - Key: Name
+          Value: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PublicSubnet2
+    DependsOn:
+      - NeuronProblemDetectorVPCPublicSubnet2DefaultRoute80B8BD8F
+      - NeuronProblemDetectorVPCPublicSubnet2RouteTableAssociation9AFE0962
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PublicSubnet2/NATGateway
+  NeuronProblemDetectorVPCPrivateSubnet1Subnet708A0901:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: ""
+      CidrBlock: 10.0.128.0/18
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: aws-cdk:subnet-name
+          Value: Private
+        - Key: aws-cdk:subnet-type
+          Value: Private
+        - Key: Name
+          Value: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PrivateSubnet1
+      VpcId:
+        Ref: NeuronProblemDetectorVPC5F617726
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PrivateSubnet1/Subnet
+  NeuronProblemDetectorVPCPrivateSubnet1RouteTableC2B2760B:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PrivateSubnet1
+      VpcId:
+        Ref: NeuronProblemDetectorVPC5F617726
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PrivateSubnet1/RouteTable
+  NeuronProblemDetectorVPCPrivateSubnet1RouteTableAssociationE6D42BF0:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: NeuronProblemDetectorVPCPrivateSubnet1RouteTableC2B2760B
+      SubnetId:
+        Ref: NeuronProblemDetectorVPCPrivateSubnet1Subnet708A0901
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PrivateSubnet1/RouteTableAssociation
+  NeuronProblemDetectorVPCPrivateSubnet1DefaultRoute1AD8D623:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: NeuronProblemDetectorVPCPublicSubnet1NATGateway34AE13E8
+      RouteTableId:
+        Ref: NeuronProblemDetectorVPCPrivateSubnet1RouteTableC2B2760B
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PrivateSubnet1/DefaultRoute
+  NeuronProblemDetectorVPCPrivateSubnet2Subnet3B7C3437:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: ""
+      CidrBlock: 10.0.192.0/18
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: aws-cdk:subnet-name
+          Value: Private
+        - Key: aws-cdk:subnet-type
+          Value: Private
+        - Key: Name
+          Value: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PrivateSubnet2
+      VpcId:
+        Ref: NeuronProblemDetectorVPC5F617726
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PrivateSubnet2/Subnet
+  NeuronProblemDetectorVPCPrivateSubnet2RouteTableD4FE42D0:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PrivateSubnet2
+      VpcId:
+        Ref: NeuronProblemDetectorVPC5F617726
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PrivateSubnet2/RouteTable
+  NeuronProblemDetectorVPCPrivateSubnet2RouteTableAssociationCB083593:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: NeuronProblemDetectorVPCPrivateSubnet2RouteTableD4FE42D0
+      SubnetId:
+        Ref: NeuronProblemDetectorVPCPrivateSubnet2Subnet3B7C3437
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PrivateSubnet2/RouteTableAssociation
+  NeuronProblemDetectorVPCPrivateSubnet2DefaultRoute7B853FC0:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: NeuronProblemDetectorVPCPublicSubnet2NATGateway475CF308
+      RouteTableId:
+        Ref: NeuronProblemDetectorVPCPrivateSubnet2RouteTableD4FE42D0
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/PrivateSubnet2/DefaultRoute
+  NeuronProblemDetectorVPCIGW3EC7DAA5:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: NeuronProblemDetectorStack/NeuronProblemDetectorVPC
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/IGW
+  NeuronProblemDetectorVPCVPCGW5182937C:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId:
+        Ref: NeuronProblemDetectorVPCIGW3EC7DAA5
+      VpcId:
+        Ref: NeuronProblemDetectorVPC5F617726
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/VPCGW
+  NeuronProblemDetectorVPCRestrictDefaultSecurityGroupCustomResource90BF6F18:
+    Type: Custom::VpcRestrictDefaultSG
+    Properties:
+      ServiceToken:
+        Fn::GetAtt:
+          - CustomVpcRestrictDefaultSGCustomResourceProviderHandlerDC833E5E
+          - Arn
+      DefaultSecurityGroupId:
+        Fn::GetAtt:
+          - NeuronProblemDetectorVPC5F617726
+          - DefaultSecurityGroup
+      Account:
+        Ref: AWS::AccountId
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorVPC/RestrictDefaultSecurityGroupCustomResource/Default
+  CustomVpcRestrictDefaultSGCustomResourceProviderRole26592FE0:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+      ManagedPolicyArns:
+        - Fn::Sub: arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: Inline
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:AuthorizeSecurityGroupIngress
+                  - ec2:AuthorizeSecurityGroupEgress
+                  - ec2:RevokeSecurityGroupIngress
+                  - ec2:RevokeSecurityGroupEgress
+                Resource:
+                  - Fn::Join:
+                      - ""
+                      - - "arn:"
+                        - Ref: AWS::Partition
+                        - ":ec2:"
+                        - Ref: AWS::Region
+                        - ":"
+                        - Ref: AWS::AccountId
+                        - :security-group/
+                        - Fn::GetAtt:
+                            - NeuronProblemDetectorVPC5F617726
+                            - DefaultSecurityGroup
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/Custom::VpcRestrictDefaultSGCustomResourceProvider/Role
+  CustomVpcRestrictDefaultSGCustomResourceProviderHandlerDC833E5E:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket:
+          Fn::Sub: cdk-hnb659fds-assets-${AWS::AccountId}-${AWS::Region}
+        S3Key: ee7de53d64cc9d6248fa6aa550f92358f6c907b5efd6f3298aeab1b5e7ea358a.zip
+      Timeout: 900
+      MemorySize: 128
+      Handler: __entrypoint__.handler
+      Role:
+        Fn::GetAtt:
+          - CustomVpcRestrictDefaultSGCustomResourceProviderRole26592FE0
+          - Arn
+      Runtime:
+        Fn::FindInMap:
+          - LatestNodeRuntimeMap
+          - Ref: AWS::Region
+          - value
+      Description: Lambda function for removing all inbound/outbound rules from the VPC default security group
+    DependsOn:
+      - CustomVpcRestrictDefaultSGCustomResourceProviderRole26592FE0
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/Custom::VpcRestrictDefaultSGCustomResourceProvider/Handler
+      aws:asset:path: asset.ee7de53d64cc9d6248fa6aa550f92358f6c907b5efd6f3298aeab1b5e7ea358a
+      aws:asset:property: Code
+  NeuronProblemDetectorClusterED21CFD2:
+    Type: AWS::ECS::Cluster
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/Resource
+  NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityInstanceSecurityGroupC637EF03:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity/InstanceSecurityGroup
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: "-1"
+      Tags:
+        - Key: Name
+          Value: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity
+      VpcId:
+        Ref: NeuronProblemDetectorVPC5F617726
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity/InstanceSecurityGroup/Resource
+  NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityInstanceRole4CDFA2E5:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - Fn::Join:
+            - ""
+            - - "arn:"
+              - Ref: AWS::Partition
+              - :iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Name
+          Value: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity/InstanceRole/Resource
+  NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityInstanceRoleDefaultPolicy1F8A3A48:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action:
+              - ecs:DeregisterContainerInstance
+              - ecs:RegisterContainerInstance
+              - ecs:Submit*
+            Effect: Allow
+            Resource:
+              Fn::GetAtt:
+                - NeuronProblemDetectorClusterED21CFD2
+                - Arn
+          - Action:
+              - ecs:Poll
+              - ecs:StartTelemetrySession
+            Condition:
+              ArnEquals:
+                ecs:cluster:
+                  Fn::GetAtt:
+                    - NeuronProblemDetectorClusterED21CFD2
+                    - Arn
+            Effect: Allow
+            Resource: "*"
+          - Action:
+              - ecr:GetAuthorizationToken
+              - ecs:DiscoverPollEndpoint
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Effect: Allow
+            Resource: "*"
+        Version: "2012-10-17"
+      PolicyName: NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityInstanceRoleDefaultPolicy1F8A3A48
+      Roles:
+        - Ref: NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityInstanceRole4CDFA2E5
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity/InstanceRole/DefaultPolicy/Resource
+  NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityInstanceProfile11E4E5E2:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - Ref: NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityInstanceRole4CDFA2E5
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity/InstanceProfile
+  NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityLaunchTemplateF1F92126:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        IamInstanceProfile:
+          Arn:
+            Fn::GetAtt:
+              - NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityInstanceProfile11E4E5E2
+              - Arn
+        ImageId:
+          Ref: SsmParameterValueawsserviceecsoptimizedamiamazonlinux2infrecommendedimageidC96584B6F00A464EAD1953AFF4B05118Parameter
+        InstanceType: inf2.xlarge
+        Monitoring:
+          Enabled: false
+        SecurityGroupIds:
+          - Fn::GetAtt:
+              - NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityInstanceSecurityGroupC637EF03
+              - GroupId
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity/LaunchTemplate
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity/LaunchTemplate
+        UserData:
+          Fn::Base64:
+            Fn::Join:
+              - ""
+              - - |-
+                  #!/bin/bash
+                  echo ECS_CLUSTER=
+                - Ref: NeuronProblemDetectorClusterED21CFD2
+                - " >> /etc/ecs/ecs.config"
+      TagSpecifications:
+        - ResourceType: launch-template
+          Tags:
+            - Key: Name
+              Value: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity/LaunchTemplate
+    DependsOn:
+      - NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityInstanceRoleDefaultPolicy1F8A3A48
+      - NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityInstanceRole4CDFA2E5
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity/LaunchTemplate/Resource
+  NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityASGDE9EB8FF:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      DesiredCapacity: "1"
+      LaunchTemplate:
+        LaunchTemplateId:
+          Ref: NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityLaunchTemplateF1F92126
+        Version:
+          Fn::GetAtt:
+            - NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityLaunchTemplateF1F92126
+            - LatestVersionNumber
+      MaxSize: "3"
+      MinSize: "1"
+      Tags:
+        - Key: Name
+          PropagateAtLaunch: true
+          Value: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity
+      VPCZoneIdentifier:
+        - Ref: NeuronProblemDetectorVPCPrivateSubnet1Subnet708A0901
+        - Ref: NeuronProblemDetectorVPCPrivateSubnet2Subnet3B7C3437
+    UpdatePolicy:
+      AutoScalingReplacingUpdate:
+        WillReplace: true
+      AutoScalingScheduledAction:
+        IgnoreUnmodifiedGroupSizeProperties: true
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity/ASG
+  NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityDrainECSHookFunctionServiceRole49BA6389:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - Fn::Join:
+            - ""
+            - - "arn:"
+              - Ref: AWS::Partition
+              - :iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Tags:
+        - Key: Name
+          Value: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity/DrainECSHook/Function/ServiceRole/Resource
+  NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityDrainECSHookFunctionServiceRoleDefaultPolicy91C029B7:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action:
+              - ec2:DescribeHosts
+              - ec2:DescribeInstanceAttribute
+              - ec2:DescribeInstanceStatus
+              - ec2:DescribeInstances
+            Effect: Allow
+            Resource: "*"
+          - Action: autoscaling:CompleteLifecycleAction
+            Effect: Allow
+            Resource:
+              Fn::Join:
+                - ""
+                - - "arn:"
+                  - Ref: AWS::Partition
+                  - ":autoscaling:"
+                  - Ref: AWS::Region
+                  - ":"
+                  - Ref: AWS::AccountId
+                  - :autoScalingGroup:*:autoScalingGroupName/
+                  - Ref: NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityASGDE9EB8FF
+          - Action:
+              - ecs:DescribeContainerInstances
+              - ecs:DescribeTasks
+              - ecs:ListTasks
+              - ecs:UpdateContainerInstancesState
+            Condition:
+              ArnEquals:
+                ecs:cluster:
+                  Fn::GetAtt:
+                    - NeuronProblemDetectorClusterED21CFD2
+                    - Arn
+            Effect: Allow
+            Resource: "*"
+          - Action:
+              - ecs:ListContainerInstances
+              - ecs:SubmitContainerStateChange
+              - ecs:SubmitTaskStateChange
+            Effect: Allow
+            Resource:
+              Fn::GetAtt:
+                - NeuronProblemDetectorClusterED21CFD2
+                - Arn
+        Version: "2012-10-17"
+      PolicyName: NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityDrainECSHookFunctionServiceRoleDefaultPolicy91C029B7
+      Roles:
+        - Ref: NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityDrainECSHookFunctionServiceRole49BA6389
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity/DrainECSHook/Function/ServiceRole/DefaultPolicy/Resource
+  NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityDrainECSHookFunction1625CD7D:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          import boto3, json, os, time
+
+          ecs = boto3.client('ecs')
+          autoscaling = boto3.client('autoscaling')
+
+
+          def lambda_handler(event, context):
+            print(json.dumps(dict(event, ResponseURL='...')))
+            cluster = os.environ['CLUSTER']
+            snsTopicArn = event['Records'][0]['Sns']['TopicArn']
+            lifecycle_event = json.loads(event['Records'][0]['Sns']['Message'])
+            instance_id = lifecycle_event.get('EC2InstanceId')
+            if not instance_id:
+              print('Got event without EC2InstanceId: %s', json.dumps(dict(event, ResponseURL='...')))
+              return
+
+            instance_arn = container_instance_arn(cluster, instance_id)
+            print('Instance %s has container instance ARN %s' % (lifecycle_event['EC2InstanceId'], instance_arn))
+
+            if not instance_arn:
+              return
+
+            task_arns = container_instance_task_arns(cluster, instance_arn)
+
+            if task_arns:
+              print('Instance ARN %s has task ARNs %s' % (instance_arn, ', '.join(task_arns)))
+
+            while has_tasks(cluster, instance_arn, task_arns):
+              time.sleep(10)
+
+            try:
+              print('Terminating instance %s' % instance_id)
+              autoscaling.complete_lifecycle_action(
+                  LifecycleActionResult='CONTINUE',
+                  **pick(lifecycle_event, 'LifecycleHookName', 'LifecycleActionToken', 'AutoScalingGroupName'))
+            except Exception as e:
+              # Lifecycle action may have already completed.
+              print(str(e))
+
+
+          def container_instance_arn(cluster, instance_id):
+            """Turn an instance ID into a container instance ARN."""
+            arns = ecs.list_container_instances(cluster=cluster, filter='ec2InstanceId==' + instance_id)['containerInstanceArns']
+            if not arns:
+              return None
+            return arns[0]
+
+          def container_instance_task_arns(cluster, instance_arn):
+            """Fetch tasks for a container instance ARN."""
+            arns = ecs.list_tasks(cluster=cluster, containerInstance=instance_arn)['taskArns']
+            return arns
+
+          def has_tasks(cluster, instance_arn, task_arns):
+            """Return True if the instance is running tasks for the given cluster."""
+            instances = ecs.describe_container_instances(cluster=cluster, containerInstances=[instance_arn])['containerInstances']
+            if not instances:
+              return False
+            instance = instances[0]
+
+            if instance['status'] == 'ACTIVE':
+              # Start draining, then try again later
+              set_container_instance_to_draining(cluster, instance_arn)
+              return True
+
+            task_count = None
+
+            if task_arns:
+              # Fetch details for tasks running on the container instance
+              tasks = ecs.describe_tasks(cluster=cluster, tasks=task_arns)['tasks']
+              if tasks:
+                # Consider any non-stopped tasks as running
+                task_count = sum(task['lastStatus'] != 'STOPPED' for task in tasks) + instance['pendingTasksCount']
+
+            if not task_count:
+              # Fallback to instance task counts if detailed task information is unavailable
+              task_count = instance['runningTasksCount'] + instance['pendingTasksCount']
+
+            print('Instance %s has %s tasks' % (instance_arn, task_count))
+
+            return task_count > 0
+
+          def set_container_instance_to_draining(cluster, instance_arn):
+            ecs.update_container_instances_state(
+                cluster=cluster,
+                containerInstances=[instance_arn], status='DRAINING')
+
+
+          def pick(dct, *keys):
+            """Pick a subset of a dict."""
+            return {k: v for k, v in dct.items() if k in keys}
+      Environment:
+        Variables:
+          CLUSTER:
+            Ref: NeuronProblemDetectorClusterED21CFD2
+      Handler: index.lambda_handler
+      Role:
+        Fn::GetAtt:
+          - NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityDrainECSHookFunctionServiceRole49BA6389
+          - Arn
+      Runtime: python3.9
+      Tags:
+        - Key: Name
+          Value: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity
+      Timeout: 310
+    DependsOn:
+      - NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityDrainECSHookFunctionServiceRoleDefaultPolicy91C029B7
+      - NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityDrainECSHookFunctionServiceRole49BA6389
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity/DrainECSHook/Function/Resource
+  NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityDrainECSHookFunctionAllowInvokeNeuronProblemDetectorStackNeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityLifecycleHookDrainHookTopicA5DCEF0A8A7A5064:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Fn::GetAtt:
+          - NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityDrainECSHookFunction1625CD7D
+          - Arn
+      Principal: sns.amazonaws.com
+      SourceArn:
+        Ref: NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityLifecycleHookDrainHookTopicFB0CE430
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity/DrainECSHook/Function/AllowInvoke:NeuronProblemDetectorStackNeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityLifecycleHookDrainHookTopicA5DCEF0A
+  NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityDrainECSHookFunctionTopicBAF651D7:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint:
+        Fn::GetAtt:
+          - NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityDrainECSHookFunction1625CD7D
+          - Arn
+      Protocol: lambda
+      TopicArn:
+        Ref: NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityLifecycleHookDrainHookTopicFB0CE430
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity/DrainECSHook/Function/Topic/Resource
+  NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityLifecycleHookDrainHookTopicFB0CE430:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Name
+          Value: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity/LifecycleHookDrainHook/Topic/Resource
+  NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityLifecycleHookDrainHookRole7FF75B48:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: autoscaling.amazonaws.com
+        Version: "2012-10-17"
+      Tags:
+        - Key: Name
+          Value: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity/LifecycleHookDrainHook/Role/Resource
+  NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityLifecycleHookDrainHookRoleDefaultPolicy30C24756:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action: sns:Publish
+            Effect: Allow
+            Resource:
+              Ref: NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityLifecycleHookDrainHookTopicFB0CE430
+        Version: "2012-10-17"
+      PolicyName: NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityLifecycleHookDrainHookRoleDefaultPolicy30C24756
+      Roles:
+        - Ref: NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityLifecycleHookDrainHookRole7FF75B48
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity/LifecycleHookDrainHook/Role/DefaultPolicy/Resource
+  NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityLifecycleHookDrainHookC7D53AF2:
+    Type: AWS::AutoScaling::LifecycleHook
+    Properties:
+      AutoScalingGroupName:
+        Ref: NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityASGDE9EB8FF
+      DefaultResult: CONTINUE
+      HeartbeatTimeout: 300
+      LifecycleTransition: autoscaling:EC2_INSTANCE_TERMINATING
+      NotificationTargetARN:
+        Ref: NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityLifecycleHookDrainHookTopicFB0CE430
+      RoleARN:
+        Fn::GetAtt:
+          - NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityLifecycleHookDrainHookRole7FF75B48
+          - Arn
+    DependsOn:
+      - NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityLifecycleHookDrainHookRoleDefaultPolicy30C24756
+      - NeuronProblemDetectorClusterNeuronAutoScalingGroupCapacityLifecycleHookDrainHookRole7FF75B48
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorCluster/NeuronAutoScalingGroupCapacity/LifecycleHookDrainHook/Resource
+  NeuronProblemDetectorTaskExecutionRole563D2650:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - Fn::Join:
+            - ""
+            - - "arn:"
+              - Ref: AWS::Partition
+              - :iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorTaskExecutionRole/Resource
+  NeuronProblemDetectorTaskExecutionRoleDefaultPolicy8DBFC0EE:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action:
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Effect: Allow
+            Resource:
+              - Fn::GetAtt:
+                  - NpdLogGroup39A02E3D
+                  - Arn
+              - Fn::GetAtt:
+                  - RecoveryLogGroupF6D50671
+                  - Arn
+        Version: "2012-10-17"
+      PolicyName: NeuronProblemDetectorTaskExecutionRoleDefaultPolicy8DBFC0EE
+      Roles:
+        - Ref: NeuronProblemDetectorTaskExecutionRole563D2650
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorTaskExecutionRole/DefaultPolicy/Resource
+  NeuronProblemDetectorTaskRole673752FB:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+        Version: "2012-10-17"
+      Policies:
+        - PolicyDocument:
+            Statement:
+              - Action:
+                  - autoscaling:DescribeAutoScalingInstances
+                  - autoscaling:SetInstanceHealth
+                  - cloudwatch:PutMetricData
+                  - ec2:DescribeInstances
+                Effect: Allow
+                Resource: "*"
+            Version: "2012-10-17"
+          PolicyName: node-recovery
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorTaskRole/Resource
+  NeuronProblemDetectorTaskRoleDefaultPolicyCFCDEF04:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action:
+              - logs:CreateLogStream
+              - logs:DescribeLogGroups
+              - logs:DescribeLogStreams
+              - logs:PutLogEvents
+              - ssmmessages:CreateControlChannel
+              - ssmmessages:CreateDataChannel
+              - ssmmessages:OpenControlChannel
+              - ssmmessages:OpenDataChannel
+            Effect: Allow
+            Resource: "*"
+        Version: "2012-10-17"
+      PolicyName: NeuronProblemDetectorTaskRoleDefaultPolicyCFCDEF04
+      Roles:
+        - Ref: NeuronProblemDetectorTaskRole673752FB
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronProblemDetectorTaskRole/DefaultPolicy/Resource
+  NpdLogGroup39A02E3D:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/npd
+      RetentionInDays: 7
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NpdLogGroup/Resource
+  RecoveryLogGroupF6D50671:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/recovery
+      RetentionInDays: 7
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/RecoveryLogGroup/Resource
+  NeuronNpdAndRecoveryDaemonService03BA6456:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster:
+        Ref: NeuronProblemDetectorClusterED21CFD2
+      DeploymentConfiguration:
+        MaximumPercent: 100
+        MinimumHealthyPercent: 0
+      EnableECSManagedTags: false
+      EnableExecuteCommand: true
+      LaunchType: EC2
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - Fn::GetAtt:
+                - NeuronNpdAndRecoveryDaemonServiceSecurityGroupC5B1D29B
+                - GroupId
+          Subnets:
+            - Ref: NeuronProblemDetectorVPCPrivateSubnet1Subnet708A0901
+            - Ref: NeuronProblemDetectorVPCPrivateSubnet2Subnet3B7C3437
+      SchedulingStrategy: DAEMON
+    DependsOn:
+      - NeuronProblemDetectorTaskRoleDefaultPolicyCFCDEF04
+      - NeuronProblemDetectorTaskRole673752FB
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronNpdAndRecoveryDaemonService/Service
+  NeuronNpdAndRecoveryDaemonServiceSecurityGroupC5B1D29B:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: NeuronProblemDetectorStack/NeuronNpdAndRecoveryDaemonService/SecurityGroup
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic by default
+          IpProtocol: "-1"
+      VpcId:
+        Ref: NeuronProblemDetectorVPC5F617726
+    DependsOn:
+      - NeuronProblemDetectorTaskRoleDefaultPolicyCFCDEF04
+      - NeuronProblemDetectorTaskRole673752FB
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/NeuronNpdAndRecoveryDaemonService/SecurityGroup/Resource
+  CDKMetadata:
+    Type: AWS::CDK::Metadata
+    Properties:
+      Analytics: v2:deflate64:H4sIAAAAAAAA/2VSXW/bMAz8LX1XtDkb+p5lXRcgK4Q46GtBK0zCRZYMfaQLDP/30vJcJ+0Tj2eaOh45l8X9d1ncwWuY6d1pZqiSbRlBnwRTLy3quWyfGy2We/uslkKlypAuU2Ux9tyENi5F3EJlcOInbhGC0wSRnH0v7sHDSvXhCeIjRHyFi1Cezgynxisb0TMeCwYl/7NFZK3HGm0UJerkKV4evUtN1nBDrCFZfdxi3RgY3r5lOoE6yHZpUuD3+u8j3EI4/cQ9WRrlf2ScjUAW/RW3Jpv+KfBQI/cI4kHPS/Rn0oM9A+wEpOiCBkP2INsFJ+WQvA/xiVvTHvVFG/zt3CmPcU10gqCW7cYNa8hROV5Z9m1CKxsiWI3Kuz0ZFmKgrnYg21/syTjmNVboawqBs04Ey0bxgoL21IwFN/nWNZRvJgPu7g78y9pNc42468QGg0u+N4b9dvWUsv4r/Aeahl34UMUDnGmH/gcEFHxlGPl6D7mORY/+53U6u8u76YS6xKOzX77JopDF17u/gWjmk41Uo9wM8Q0+wiv5GQMAAA==
+    Metadata:
+      aws:cdk:path: NeuronProblemDetectorStack/CDKMetadata/Default
+    Condition: CDKMetadataAvailable
+Mappings:
+  LatestNodeRuntimeMap:
+    af-south-1:
+      value: nodejs20.x
+    ap-east-1:
+      value: nodejs20.x
+    ap-northeast-1:
+      value: nodejs20.x
+    ap-northeast-2:
+      value: nodejs20.x
+    ap-northeast-3:
+      value: nodejs20.x
+    ap-south-1:
+      value: nodejs20.x
+    ap-south-2:
+      value: nodejs20.x
+    ap-southeast-1:
+      value: nodejs20.x
+    ap-southeast-2:
+      value: nodejs20.x
+    ap-southeast-3:
+      value: nodejs20.x
+    ap-southeast-4:
+      value: nodejs20.x
+    ap-southeast-5:
+      value: nodejs20.x
+    ap-southeast-7:
+      value: nodejs20.x
+    ca-central-1:
+      value: nodejs20.x
+    ca-west-1:
+      value: nodejs20.x
+    cn-north-1:
+      value: nodejs18.x
+    cn-northwest-1:
+      value: nodejs18.x
+    eu-central-1:
+      value: nodejs20.x
+    eu-central-2:
+      value: nodejs20.x
+    eu-north-1:
+      value: nodejs20.x
+    eu-south-1:
+      value: nodejs20.x
+    eu-south-2:
+      value: nodejs20.x
+    eu-west-1:
+      value: nodejs20.x
+    eu-west-2:
+      value: nodejs20.x
+    eu-west-3:
+      value: nodejs20.x
+    il-central-1:
+      value: nodejs20.x
+    me-central-1:
+      value: nodejs20.x
+    me-south-1:
+      value: nodejs20.x
+    mx-central-1:
+      value: nodejs20.x
+    sa-east-1:
+      value: nodejs20.x
+    us-east-1:
+      value: nodejs20.x
+    us-east-2:
+      value: nodejs20.x
+    us-west-1:
+      value: nodejs20.x
+    us-west-2:
+      value: nodejs20.x
+Parameters:
+  SsmParameterValueawsserviceecsoptimizedamiamazonlinux2infrecommendedimageidC96584B6F00A464EAD1953AFF4B05118Parameter:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ecs/optimized-ami/amazon-linux-2/inf/recommended/image_id
+  BootstrapVersion:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /cdk-bootstrap/hnb659fds/version
+    Description: Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]
+Conditions:
+  CDKMetadataAvailable:
+    Fn::Or:
+      - Fn::Or:
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - af-south-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-east-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-northeast-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-northeast-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-northeast-3
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-south-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-south-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-southeast-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-southeast-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-southeast-3
+      - Fn::Or:
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-southeast-4
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ca-central-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ca-west-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - cn-north-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - cn-northwest-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-central-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-central-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-north-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-south-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-south-2
+      - Fn::Or:
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-west-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-west-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-west-3
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - il-central-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - me-central-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - me-south-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - sa-east-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - us-east-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - us-east-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - us-west-1
+      - Fn::Equals:
+          - Ref: AWS::Region
+          - us-west-2
+
