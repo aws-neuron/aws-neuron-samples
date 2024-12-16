@@ -1,5 +1,5 @@
 {
-  "availability-zones:account=<AWS-ACCOUNT-ID>:region=us-east-1": [
+  "availability-zones:account=xxxxxxxx:region=us-east-1": [
     "us-east-1a",
     "us-east-1b",
     "us-east-1c",
