@@ -24,6 +24,9 @@ Before you start, ensure that you have installed the latest version of the follo
 2. [aws cdk](https://docs.aws.amazon.com/cdk/v2/guide/getting_started.html)
 3. [Session Manager Plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html)
 
+4. Insert actual AWS account id in line number 2 of `cdk.context.json` file
+5. OPTIONAL: If you uncomment, line 23 of `app.py` insert actual AWS account id. 
+
 
 ## Environment Setup 
 To manually create a virtualenv on MacOS and Linux:
