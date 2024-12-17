@@ -99,8 +99,9 @@ class Lamb(Optimizer):
                 loss = closure()
 
         device = self.param_groups[0]['params'][0].device
-        one_tensor = torch.tensor(1.0, device=device)  # because torch.where doesn't handle scalars correctly
-        global_grad_norm = torch.zeros(1, device=device)
+        dtype = self.param_groups[0]['params'][0].dtype
+        one_tensor = torch.tensor(1.0, device=device, dtype=dtype)  # because torch.where doesn't handle scalars correctly
+        global_grad_norm = torch.zeros(1, device=device, dtype=dtype)
         for group in self.param_groups:
             for p in group['params']:
                 if p.grad is None:
@@ -113,7 +114,7 @@ class Lamb(Optimizer):
         global_grad_norm = torch.sqrt(global_grad_norm)
         # FIXME it'd be nice to remove explicit tensor conversion of scalars when torch.where promotes
         # scalar types properly https://github.com/pytorch/pytorch/issues/9190
-        max_grad_norm = torch.tensor(self.defaults['max_grad_norm'], device=device)
+        max_grad_norm = torch.tensor(self.defaults['max_grad_norm'], device=device, dtype=dtype)
         clip_global_grad_norm = torch.where(
             global_grad_norm > max_grad_norm,
             global_grad_norm / max_grad_norm,

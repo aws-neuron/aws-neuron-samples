@@ -14,10 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# AdamW adapted from HuggingFace, with high-precision optimizer states for BF16/FP32 training.
+# AdamW adapted from HuggingFace, with high-precision copy of weights for BF16/FP32 training.
 # source: https://github.com/huggingface/transformers/blob/main/src/transformers/optimization.py#L358
 
-import os
 import math
 import warnings
 from functools import partial
@@ -29,10 +28,10 @@ from torch.optim import Optimizer
 from transformers.utils import logging
 from transformers.utils.versions import require_version
 
-class AdamW_FP32OptimParams(Optimizer):
+class AdamW_FP32ParamsCopy(Optimizer):
     """
     Implements Adam algorithm with weight decay fix as introduced in [Decoupled Weight Decay
-    Regularization](https://arxiv.org/abs/1711.05101), designed with high-precision optimizer states.
+    Regularization](https://arxiv.org/abs/1711.05101).
     Parameters:
         params (`Iterable[nn.parameter.Parameter]`):
             Iterable of parameters to optimize or dictionaries defining parameter groups.
@@ -77,8 +76,17 @@ class AdamW_FP32OptimParams(Optimizer):
         if not 0.0 <= eps:
             raise ValueError(f"Invalid epsilon value: {eps} - should be >= 0.0")
         defaults = {"lr": lr, "betas": betas, "eps": eps, "weight_decay": weight_decay, "correct_bias": correct_bias}
-        self.upcast_optim_states = os.environ.get('XLA_DOWNCAST_BF16', '0') == '1'
         super().__init__(params, defaults)
+        self.make_copy_of_weights()
+
+
+    def make_copy_of_weights(self):
+        # keep a copy of weights in highprec
+        self.param_groups_highprec = []
+        for group in self.param_groups:
+            params = group['params']
+            param_groups_highprec = [p.data.float() for p in params]
+            self.param_groups_highprec.append({'params': param_groups_highprec})
 
     def step(self, closure: Callable = None):
         """
@@ -90,16 +98,12 @@ class AdamW_FP32OptimParams(Optimizer):
         if closure is not None:
             loss = closure()
 
-        for group in self.param_groups:
-            for p in group["params"]:
+        for group, group_highprec in zip(self.param_groups, self.param_groups_highprec):
+            for p, p_highprec in zip(group['params'], group_highprec['params']):
                 if p.grad is None:
                     continue
-                # Upcast grad to fp64 so that XLA_DOWNCAST_BF16=1 keeps grad operations in fp32
-                if self.upcast_optim_states:
-                    grad = p.grad.data.double()
-                else:
-                    grad = p.grad.data.float()
-
+                #grad = p.grad.data
+                grad = p.grad.data.float()
                 if grad.is_sparse:
                     raise RuntimeError("Adam does not support sparse gradients, please consider SparseAdam instead")
 
@@ -108,11 +112,10 @@ class AdamW_FP32OptimParams(Optimizer):
                 # State initialization
                 if len(state) == 0:
                     state["step"] = 0
-                    # Use fp64 for exp_avg_* so that XLA_DOWNCAST_BF16=1 keeps them in fp32
                     # Exponential moving average of gradient values
-                    state["exp_avg"] = torch.zeros_like(grad)
+                    state["exp_avg"] = torch.zeros_like(p_highprec.data)
                     # Exponential moving average of squared gradient values
-                    state["exp_avg_sq"] = torch.zeros_like(grad)
+                    state["exp_avg_sq"] = torch.zeros_like(p_highprec.data)
 
                 exp_avg, exp_avg_sq = state["exp_avg"], state["exp_avg_sq"]
                 beta1, beta2 = group["betas"]
@@ -131,7 +134,8 @@ class AdamW_FP32OptimParams(Optimizer):
                     bias_correction2 = 1.0 - beta2 ** state["step"]
                     step_size = step_size * math.sqrt(bias_correction2) / bias_correction1
 
-                p.data.addcdiv_(exp_avg, denom, value=-step_size)
+                #p.data.addcdiv_(exp_avg, denom, value=-step_size)
+                p_highprec.data.addcdiv_(exp_avg, denom, value=-step_size)
 
                 # Just adding the square of the weights to the loss function is *not*
                 # the correct way of using L2 regularization/weight decay with Adam,
@@ -142,7 +146,10 @@ class AdamW_FP32OptimParams(Optimizer):
                 # of the weights to the loss with plain (non-momentum) SGD.
                 # Add weight decay at the end (fixed version)
                 if group["weight_decay"] > 0.0:
-                    p.data.add_(p.data, alpha=(-group["lr"] * group["weight_decay"]))
+                    #p.data.add_(p.data, alpha=(-group["lr"] * group["weight_decay"]))
+                    p_highprec.data.add_(p_highprec.data, alpha=(-group["lr"] * group["weight_decay"]))
+
+                p.data = p_highprec.to(torch.float)
 
         return loss
 

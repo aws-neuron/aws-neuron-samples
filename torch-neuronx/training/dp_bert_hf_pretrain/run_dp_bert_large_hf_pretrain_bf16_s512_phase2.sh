@@ -12,8 +12,6 @@ export TF_GRPC_DEFAULT_OPTIONS=grpc.keepalive_time_ms=60000,grpc.keepalive_timeo
 
 IMDS_TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"`
 INSTANCEID=`curl -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" -v http://169.254.169.254/latest/meta-data/instance-id`
-BATCH_SIZE=2
-GRAD_ACCUM_USTEPS=512
 SEQ_LEN=512
 MAX_PRED_LEN=80
 WARM_UP=781
@@ -23,9 +21,45 @@ LR=2.8e-4
 WORLD_SIZE_JOB=1
 RANK_NODE=0
 
+if [ "$1" == "amp" ]; then
+    echo "Enable PyTorch Autocast (AMP)"
+    BATCH_SIZE=2
+    GRAD_ACCUM_USTEPS=512
+    ADD_ARGS="--enable_pt_autocast"
+elif [ "$1" == "fp32paramscopy" ]; then
+    echo "Enable BF16 with FP32 copy of weights"
+    BATCH_SIZE=2
+    GRAD_ACCUM_USTEPS=512
+    ADD_ARGS="--optimizer=AdamW_FP32ParamsCopy"
+elif [ "$1" == "fp32" ]; then
+    echo "Enable Full FP32"
+    BATCH_SIZE=1
+    GRAD_ACCUM_USTEPS=1024
+    ADD_ARGS="--optimizer=AdamW --enable_fp32"
+    # XLA_DOWNCAST_BF16 is deprecated in torch-xla 2.4+
+    # Switched to using model.to(torch.bfloat16)
+else
+    echo "Enable Full BF16 (model.to(torch.bfloat16)) and FP32 optimizer parameters"
+    BATCH_SIZE=2
+    GRAD_ACCUM_USTEPS=512
+    ADD_ARGS=""
+    # XLA_DOWNCAST_BF16 is deprecated in torch-xla 2.4+
+    # Switched to using model.to(torch.bfloat16)
+fi
+
 if [ -e /opt/aws/neuron/bin/neuron-ls ]; then
     NUM_DEVICES=`/opt/aws/neuron/bin/neuron-ls -j | jq '. | length'`
-    NC_PER_DEVICE=`/opt/aws/neuron/bin/neuron-ls -j | jq '.[0].nc_count'`
+    NC_PER_DEVICE=`/opt/aws/neuron/bin/neuron-ls -j | jq '.[0].lnc_count'`
+    echo "Found logical neuroncores NC_PER_DEVICE per device"
+
+    if [ -z "$NC_PER_DEVICE" ] || [ "$NC_PER_DEVICE" == "null" ]; then
+        NC_PER_DEVICE=`/opt/aws/neuron/bin/neuron-ls -j | jq '.[0].nc_count'`
+        if [[ "$NC_PER_DEVICE" == "8" || "$NC_PER_DEVICE" == "128" ]]; then
+            echo " Running on Trn2 device"
+            let NC_PER_DEVICE=$NC_PER_DEVICE/2
+        fi
+    fi
+
     let NUM_NEURONCORES=$NUM_DEVICES*$NC_PER_DEVICE
     echo "Found $NUM_NEURONCORES NeuronCores"
 else
@@ -84,19 +118,6 @@ fi
 mkdir -p $OUTPUT_DIR
 if [ -z "$json" ]; then json="$OUTPUT_DIR/results.json" && rm -f $json; fi
 
-if [ "$1" == "amp" ]; then
-    echo "Enable PyTorch Autocast (AMP)"
-    ADD_ARGS="--enable_pt_autocast"
-    unset XLA_DOWNCAST_BF16
-elif [ "$1" == "fp32wcopy" ]; then
-    echo "Enable Full BF16 with FP32 Weights Copy"
-    ADD_ARGS="--optimizer=AdamW_WCopy"
-    export XLA_DOWNCAST_BF16=1
-else
-    echo "Enable Full BF16 (XLA_DOWNCAST_BF16=1)"
-    ADD_ARGS=""
-    export XLA_DOWNCAST_BF16=1
-fi
 sudo sysctl -w net.ipv4.ip_local_reserved_ports=48620 || exit 1
 torchrun $DISTRIBUTED_ARGS dp_bert_large_hf_pretrain_hdf5.py $ADD_ARGS \
         --output_dir $OUTPUT_DIR \

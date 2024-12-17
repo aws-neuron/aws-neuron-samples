@@ -13,12 +13,39 @@ INSTANCEID=`curl -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" -v http://169.254.16
 WORLD_SIZE_JOB=1
 RANK_NODE=0
 MAX_STEPS=7032
-BATCH_SIZE=16
-GRAD_ACCUM_USTEPS=128 #keep the GBS=64k to benchmark over GPU
+
+#keep the GBS=64k to benchmark over GPU
+if [ "$1" == "amp" ]; then
+    echo "Enable PyTorch Autocast (AMP)"
+    BATCH_SIZE=16
+    GRAD_ACCUM_USTEPS=128
+    ADD_ARGS="--enable_pt_autocast"
+elif [ "$1" == "fp32" ]; then
+    echo "Enable Full FP32"
+    BATCH_SIZE=8
+    GRAD_ACCUM_USTEPS=256
+    ADD_ARGS="--optimizer=AdamW --enable_fp32"
+    # XLA_DOWNCAST_BF16 is deprecated in torch-xla 2.4+
+    # Switched to using model.to(torch.bfloat16)
+else
+    echo "Enable Full BF16 (model.to(torch.bfloat16)) and FP32 optimizer parameters"
+    BATCH_SIZE=16
+    GRAD_ACCUM_USTEPS=128
+    ADD_ARGS=""
+    # XLA_DOWNCAST_BF16 is deprecated in torch-xla 2.4+
+    # Switched to using model.to(torch.bfloat16)
+fi
 
 if [ -e /opt/aws/neuron/bin/neuron-ls ]; then
     NUM_DEVICES=`/opt/aws/neuron/bin/neuron-ls -j | jq '. | length'`
-    NC_PER_DEVICE=`/opt/aws/neuron/bin/neuron-ls -j | jq '.[0].nc_count'`
+    NC_PER_DEVICE=`/opt/aws/neuron/bin/neuron-ls -j | jq '.[0].lnc_count'`
+    if [ -z "$NC_PER_DEVICE" ] || [ "$NC_PER_DEVICE" == "null" ]; then
+        NC_PER_DEVICE=`/opt/aws/neuron/bin/neuron-ls -j | jq '.[0].nc_count'`
+        if [[ "$NC_PER_DEVICE" == "8" || "$NC_PER_DEVICE" == "128" ]]; then
+            echo " Running on Trn2 device"
+            let NC_PER_DEVICE=$NC_PER_DEVICE/2
+        fi
+    fi
     let NUM_NEURONCORES=$NUM_DEVICES*$NC_PER_DEVICE
     echo "Found $NUM_NEURONCORES NeuronCores"
 else
@@ -78,7 +105,7 @@ mkdir -p $OUTPUT_DIR
 if [ -z "$json" ]; then json="$OUTPUT_DIR/results.json" && rm -f $json; fi
 
 sudo sysctl -w net.ipv4.ip_local_reserved_ports=48620 || exit 1
-XLA_DOWNCAST_BF16=1 torchrun $DISTRIBUTED_ARGS dp_bert_large_hf_pretrain_hdf5.py --optimizer $OPT --lr 6e-3 --output_dir $OUTPUT_DIR --max_steps $MAX_STEPS --steps_this_run $steps_this_run --metrics_file $json --batch_size=$BATCH_SIZE --grad_accum_usteps=$GRAD_ACCUM_USTEPS |& tee $OUTPUT_DIR/$LOG_FILE
+torchrun $DISTRIBUTED_ARGS dp_bert_large_hf_pretrain_hdf5.py $ADD_ARGS --optimizer $OPT --lr 6e-3 --output_dir $OUTPUT_DIR --max_steps $MAX_STEPS --steps_this_run $steps_this_run --metrics_file $json --batch_size=$BATCH_SIZE --grad_accum_usteps=$GRAD_ACCUM_USTEPS |& tee $OUTPUT_DIR/$LOG_FILE
 
 ret_val=${PIPESTATUS[0]}
 echo $ret_val

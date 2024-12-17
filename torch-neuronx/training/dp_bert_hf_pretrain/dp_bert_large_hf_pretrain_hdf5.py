@@ -26,6 +26,7 @@
 # - Added logger class to print log and also log to TensorBoard database
 
 import os
+import re
 
 import torch
 import glob
@@ -70,16 +71,14 @@ import inspect
 import requests
 import gc
 
-
 from torch_xla import __version__
 version_tuple = tuple(map(int, __version__.split(".")[:2]))
 is_pt21_plus = version_tuple >= (2,1)
 is_pt20 = version_tuple == (2,0)
 
-os.environ["NEURON_CC_FLAGS"] =  os.environ.get('NEURON_CC_FLAGS', '') + " --model-type=transformer"
+os.environ["NEURON_CC_FLAGS"] =  os.environ.get('NEURON_CC_FLAGS', '') + " --model-type=transformer --retry_failed_compilation "
 
-# For PT autocast.
-torch.cuda.is_bf16_supported = lambda: True
+xla_downcast = os.environ.get('XLA_DOWNCAST_BF16', '0') == '1'
 
 # Workaround for NaNs seen with transformers version >= 4.21.0
 # https://github.com/aws-neuron/aws-neuron-sdk/issues/593
@@ -91,8 +90,6 @@ try:
     from utilities.reporting import Metric, post_metrics
 except ImportError:
     Metric = post_metrics = lambda *args, **kwargs: None
-
-PJRT_DEVICE = (os.environ.get("PJRT_DEVICE", None) == 'NEURON')
 
 class Throughput:
     def __init__(self, batch_size, world_size, grad_accum_usteps, moving_avg_window_size=10):
@@ -241,11 +238,11 @@ def get_model(flags):
     my_model = BertForPreTraining(my_config)
     return my_model
 
-def extract_mfu(num_layers, hidden_size, sequence_len, batch_size, average_throughput, world_size):
+def extract_mfu(num_layers, hidden_size, sequence_len, batch_size, average_throughput, world_size, model_dtype):
     flops_per_seq = 12 * num_layers * hidden_size * sequence_len * (6 * hidden_size + sequence_len)
     tflops_per_seq = flops_per_seq / 10**12
     tflops_per_sec_per_worker = tflops_per_seq * average_throughput/world_size
-    if '--auto-cast=none' in os.getenv('NEURON_CC_FLAGS', default=''):
+    if '--auto-cast=none' in os.getenv('NEURON_CC_FLAGS', default='') and model_dtype == 'torch.float32':
         hw_tflops_per_worker = 760/32 
     else:
         hw_tflops_per_worker = 3040/32 
@@ -287,6 +284,8 @@ def train_bert_hdf5(flags):
     worker_init = WorkerInitObj(flags.seed)
     device = xm.xla_device()
     model = get_model(flags)
+    if not flags.enable_fp32 and not flags.enable_pt_autocast and not xla_downcast:
+        model.to(torch.bfloat16)
     model.to(device)
     model.tie_weights()
     # Additional tie needed
@@ -294,7 +293,10 @@ def train_bert_hdf5(flags):
     model.cls.predictions.decoder.bias = model.cls.predictions.bias
     model.train()
     model_dtype = get_dtype(model)
-    running_loss = torch.zeros(1, dtype=torch.double).to(device)
+    if xla_downcast:
+        running_loss = torch.zeros(1, dtype=torch.double).to(device)
+    else:
+        running_loss = torch.zeros(1, dtype=torch.float).to(device)
 
     param_optimizer = list(model.named_parameters())
     no_decay = ['bias', 'LayerNorm'] # gamma/beta are in LayerNorm.weight
@@ -315,6 +317,14 @@ def train_bert_hdf5(flags):
             raise ex
         print('Using AdamW with FP32 optimizer states')
         optimizer = AdamW_FP32OptimParams(optimizer_grouped_parameters, flags.lr)
+    elif optimizer_type == 'AdamW_FP32ParamsCopy':
+        try:
+            from adamw_fp32_params_copy import AdamW_FP32ParamsCopy
+        except ImportError as ex:
+            print(f'{optimizer_type} selected but no AdamW with FP32 parameters copy implementation is available. Please make sure adamw_fp32_params_copy.py exists in the same dir.')
+            raise ex
+        print('Using AdamW with FP32 copy of weights')
+        optimizer = AdamW_FP32ParamsCopy(optimizer_grouped_parameters, flags.lr)
     elif optimizer_type == 'LAMB':
         try:
             from lamb import Lamb
@@ -386,7 +396,7 @@ def train_bert_hdf5(flags):
         for i, data in enumerate(train_loader):
             training_ustep += 1
             input_ids, segment_ids, input_mask, masked_lm_labels, next_sentence_labels = data
-            with torch.autocast(enabled=flags.enable_pt_autocast, dtype=torch.bfloat16, device_type='cuda'):
+            with torch.autocast(enabled=flags.enable_pt_autocast, dtype=torch.bfloat16, device_type='xla'):
                 outputs = model(input_ids=input_ids,
                                 attention_mask=input_mask,
                                 token_type_ids=segment_ids,
@@ -492,6 +502,9 @@ def train_bert_hdf5(flags):
     thread_pool = ThreadPoolExecutor(1)
     chkpt_files = deque([])
 
+    if version_tuple >= (2,5) and flags.torch_xla_compile:
+        train_loop_fn = torch_xla.compile(train_loop_fn)
+
     assert(os.path.exists(os.path.expanduser(flags.data_dir))), "ERROR: Data directory {} doesn't exist!".format(flags.data_dir)
     while True:
         if flags.resume_ckpt and not flags.phase2:
@@ -518,7 +531,19 @@ def train_bert_hdf5(flags):
         train_device_loader = pl.MpDeviceLoader(train_dataloader, device)
         if is_root:
             parameters.update(
-                {"Sequence length": train_dataloader.dataset.sequence_length}
+                {
+                    "Sequence length": train_dataloader.dataset.sequence_length,
+                    "Model": 'BERT',
+                    "TestType": "Training",
+                    "ModelCategory": "NLP",
+                    "Vocab size": model.config.vocab_size,
+                    "Number of layers": len(model.bert.encoder.layer),
+                    "Hidden size": model.config.hidden_size,
+                    "Number of heads": model.config.num_attention_heads,
+                    "Model Size": str(model.num_parameters()//1000000) + 'M',
+                    "Batch Size": flags.batch_size,
+                    "Intermediate Size": model.config.intermediate_size,
+                }
             )
 
         # use DP dataloader
@@ -542,7 +567,7 @@ def train_bert_hdf5(flags):
                     Metric("Loss", final_loss, units="", additional=additional_data),
                     Metric("Throughput", logger.throughputs[-1], units="seq/s", additional=additional_data)
                 ]
-                post_metrics(metric_data, parameters=parameters)
+                post_metrics(metric_data, parameters=parameters, report_v1=False, report_v2=True)
 
                 if (f % flags.shards_per_ckpt == 0) or (global_step >= flags.steps_this_run):
                     if flags.phase2:
@@ -582,12 +607,20 @@ def train_bert_hdf5(flags):
                     if os.path.exists(compile_time_file):
                         with open(compile_time_file, "r") as f:
                             compile_time = float(f.readline())
+                    elif os.path.exists("slurm-wrap-1.txt"):      
+                        time_for_workers = []    
+                        with open('slurm-wrap-1.txt', 'r') as file:
+                            print('collecting compile_time for pcluster workers log')
+                            for w in file:      
+                                if re.search('compilation_time', w):
+                                    time_for_workers.append(float(w.split(':')[1].strip()))
+                        compile_time = max(time_for_workers)    
                     # record aggregate & final statistics in the metrics file
                     additional_data = {
                         "Epoch": epoch, "Global step": global_step, "Microstep": training_ustep
                     }
                     average_throughput = round(sum(logger.throughputs)/len(logger.throughputs), 4)
-                    model_flops_utilization = extract_mfu(len(model.bert.encoder.layer), model.bert.config.hidden_size, train_dataloader.dataset.sequence_length, flags.batch_size, average_throughput, world_size)
+                    model_flops_utilization = extract_mfu(len(model.bert.encoder.layer), model.bert.config.hidden_size, train_dataloader.dataset.sequence_length, flags.batch_size, average_throughput, world_size, model_dtype)
                     metric_data = [
                         Metric("FinalLoss", final_loss, units="", additional=additional_data),
                         Metric("TimeToTrain", round(time_diff/60, 4), units="minutes", additional=additional_data),
@@ -599,12 +632,12 @@ def train_bert_hdf5(flags):
                         derived_expected_throughput = (0.95*flags.expected_average_throughput)
                         metric_data.append(
                             Metric("AverageThroughput", average_throughput, units="seq/s", expected=flags.expected_average_throughput, derived=derived_expected_throughput, additional=additional_data))
-                        post_metrics(metric_data, parameters=parameters)
+                        post_metrics(metric_data, parameters=parameters, report_v1=False, report_v2=True)
                         assert(average_throughput >= derived_expected_throughput), "Average throughput :{} is  below derived expected threshold: {}".format(average_throughput, derived_expected_throughput)
                     else:
                         metric_data.append(
                             Metric("AverageThroughput", average_throughput, units="seq/s", additional=additional_data))
-                        post_metrics(metric_data, parameters=parameters)
+                        post_metrics(metric_data, parameters=parameters, report_v1=False, report_v2=True)
                 return
             del train_device_loader
             del train_dataloader
@@ -617,7 +650,9 @@ def train_bert_hdf5(flags):
 
 
 def init_process_group():
-    if PJRT_DEVICE:
+    if is_pt21_plus:
+        dist.init_process_group('xla', init_method='xla://')
+    elif is_pt20:
         import torch_xla.experimental.pjrt_backend
         import torch_xla.experimental.pjrt as pjrt
         dist.init_process_group('xla', init_method='pjrt://')
@@ -641,7 +676,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_dir', type=str, default='~/examples_datasets/bert_pretrain_wikicorpus_tokenized_hdf5_seqlen128/', help="Pre-tokenized HDF5 dataset directory.")
     parser.add_argument('--output_dir', type=str, default='./output', help="Directory for checkpoints and logs.")
     parser.add_argument('--metrics_file', type=str, default='results.json', help="training metrics results file")
-    parser.add_argument('--optimizer', type=str, default='AdamW_FP32OptimParams', choices=['AdamW', 'AdamW_FP32OptimParams', 'LAMB'], help="choose optimizer type: AdamW_FP32OptimParams (default, optimizer params in high precision), AdamW, LAMB")
+    parser.add_argument('--optimizer', type=str, default='AdamW_FP32OptimParams', choices=['AdamW', 'AdamW_FP32OptimParams', 'AdamW_FP32ParamsCopy', 'LAMB'], help="choose optimizer type: AdamW_FP32OptimParams (default, optimizer params in high precision), AdamW, LAMB")
     parser.add_argument('--batch_size', type=int, default=8, help="Worker batch size.")
     parser.add_argument('--max_steps', type=int, default=28125, help="Maximum total accumulation-steps to run.")
     parser.add_argument('--steps_this_run', type=int, default=-1, help="Exit early at <value> steps and not go to max_steps. -1 to mean no early exit.")
@@ -659,6 +694,7 @@ if __name__ == '__main__':
     parser.add_argument("--grad_accum_usteps", type=int, default=64, help="Gradient accumulation micro-steps (an accumulation-step has <value> micro-steps.")
     parser.add_argument('--minimal_ckpt', default=False, action='store_true', help="When specified, don't store optimizer/lr-schedule states in checkpoints.")
     parser.add_argument('--enable_pt_autocast', action="store_true", help="Enable pytorch autocast.")
+    parser.add_argument('--enable_fp32', action="store_true", help="Enable full fp32 training. Else, cast model to bfloat16.")
     parser.add_argument('--phase1_end_step', type=int, default=28125, help="Number of training steps in Phase1 - seq len 128")
     parser.add_argument('--phase2', default=False, action='store_true', help="Whether to train with seq len 512")
     parser.add_argument('--print_grad_norm', default=False, action='store_true', help="Whether to print grad norm")
@@ -667,15 +703,15 @@ if __name__ == '__main__':
     parser.add_argument("--snapshot_step_list", default=None, help="comma separated list of steps to take snapshot; also used to enable snapshotting with dropout disabled (WARNNG: can take lots of disk space, esp with grad accum.)")
     parser.add_argument("--snapshot_rank_list", default="0", help="comma separated list of ranks to take snapshot, or 'all' for all ranks (WARNNG: can take lots of disk space, esp with grad accum.)")
     parser.add_argument("--snapshot_dump_dir", default="./snapshots", help="directory to dump snapshots; snapshot_step_list must be specified")
+    parser.add_argument('--torch_xla_compile', default=False, action='store_true', help="Run torch_xla.compile on the training script function.")
 
     args = parser.parse_args(sys.argv[1:])
 
     if args.steps_this_run < 0:
         args.steps_this_run = args.max_steps
 
-    if args.enable_pt_autocast:
+    if not args.enable_fp32 and args.optimizer != "AdamW_FP32ParamsCopy" and not "NEURON_RT_STOCHASTIC_ROUNDING_EN" in os.environ:
         os.environ["NEURON_RT_STOCHASTIC_ROUNDING_EN"] = "1"
-
 
     # Enable HLO snapshot dump before device init (first use of 'xla' device)
     # Will do more fine-grained enablement in the training function  to track global step
