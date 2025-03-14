@@ -78,6 +78,7 @@ def attention_wrapper_sharded_without_swap(query, key, value):
     v = value.clone().reshape((bs*n_head, q_len, d_head))
     attn_output = torch.zeros((bs*n_head, q_len, d_head), dtype=torch.bfloat16, device=q.device)
     use_sharded_attention_kernel = True
+    # use_sharded_attention_kernel = False #Use for trn1/inf2
     if use_sharded_attention_kernel:
         grid = (vnc(2),)
         _flash_fwd_call[grid](q, k, v, 0.117, attn_output, kernel_name="AttentionMMSoftmaxMMWithoutSwap")
