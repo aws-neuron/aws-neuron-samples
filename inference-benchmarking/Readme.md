@@ -1,0 +1,3 @@
+# Inference benchmarking
+
+This folder contains scripts to evaluate accuracy of LLM models inference with open source datasets. Please refer [Accuracy Eval Developer Guide](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/nxd-inference/developer_guides/accuracy-eval-with-datasets.html) or [Accuracy Evaluation Tutorial](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/libraries/nxd-inference/tutorials/trn1-llama3.1-70b-instruct-accuracy-eval.html) on how to use these scripts. In the future we will expand this folder with scripts to benchmark performance with tools such as LLMPerf and other accuracy evaluation scripts.
