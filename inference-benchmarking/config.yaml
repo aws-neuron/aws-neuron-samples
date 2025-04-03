@@ -1,0 +1,22 @@
+server:
+  name: "Meta-llama3.1-8B-Instruct"
+  model_path: "/home/ubuntu/models/Meta-llama3.1-8B-Instruct/"
+  model_s3_path: null
+  compiled_model_path: "/home/ubuntu/traced_models/Meta-llama3.1-8B-Instruct/"
+  max_seq_len: 16384
+  context_encoding_len: 16384
+  tp_degree: 32
+  n_vllm_threads: 32
+  server_port: 8000
+  continuous_batch_size: 1
+
+test:
+  accuracy:
+    mytest:
+      client: "lm_eval"
+      datasets: ["gsm8k_cot", "mmlu_flan_n_shot_generative_computer_security"]
+      max_concurrent_requests: 1
+      timeout: 3600
+      client_params:
+        limit: 200
+        use_chat: True
