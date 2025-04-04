@@ -1,0 +1,7 @@
+datasets
+tiktoken
+torch
+openai
+transformers
+psutil
+botocore
