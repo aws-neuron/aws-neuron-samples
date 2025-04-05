@@ -44,5 +44,6 @@
 
 # Known Issues
 
-* NA
+* With 2.7 release of Neuron SDK, there is a known low accuracy with Hugging Face Roberta Large, finetuning on trn1
+* for BF16 version of the model.
 
