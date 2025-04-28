@@ -12,6 +12,7 @@ import torch_xla.core.xla_model as xm
 # XLA imports for parallel loader and multi-processing
 import torch_xla.distributed.parallel_loader as pl
 import torch_xla.distributed.xla_multiprocessing as xmp
+import torch_xla.runtime as xr
 from torch.utils.data.distributed import DistributedSampler
 
 # Global constants
@@ -25,7 +26,7 @@ train_dataset = mnist.MNIST(root='./MNIST_DATA_train',
 
 def main(index):
     # XLA MP: get world size
-    world_size = xm.xrt_world_size()
+    world_size = xr.world_size()
     # multi-processing: ensure each worker has same initial weights
     torch.manual_seed(0)
     # Move model to device and declare optimizer and loss function
@@ -40,7 +41,7 @@ def main(index):
     if world_size > 1:
         train_sampler = DistributedSampler(train_dataset,
                                            num_replicas=world_size,
-                                           rank=xm.get_ordinal(),
+                                           rank=xr.global_ordinal(),
                                            shuffle=True)
     train_loader = DataLoader(train_dataset,
                               batch_size=BATCH_SIZE,

@@ -7,6 +7,7 @@ from time import gmtime, strftime
 from tqdm.auto import tqdm
 import torch
 import torch_xla.core.xla_model as xm
+import torch_xla.runtime as xr
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, get_scheduler
@@ -89,7 +90,7 @@ if __name__ == '__main__':
             optimizer.zero_grad()
             progress_bar.update(1)
 
-        logger.info("Epoch {}, rank {}, Loss {:0.4f}".format(epoch, xm.get_ordinal(), loss.detach().to("cpu")))
+        logger.info("Epoch {}, rank {}, Loss {:0.4f}".format(epoch, xr.global_ordinal(), loss.detach().to("cpu")))
 
     logger.info("End training: {}".format(strftime("%Y-%m-%d %H:%M:%S", gmtime())))
 
