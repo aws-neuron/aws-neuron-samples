@@ -16,6 +16,7 @@ import torch_xla.distributed.parallel_loader as pl
 import torch_xla.utils.utils as xu
 import torch_xla.core.xla_model as xm
 import torch_xla.distributed.xla_multiprocessing as xmp
+import torch_xla.runtime as xr
 
 if not '..' in sys.path: sys.path.append('..')
 import common.vision_utils as vision_utils
@@ -57,8 +58,8 @@ def train():
   train_loader, test_loader = vision_utils.create_data_loaders(
     train_dataset,
     test_dataset,
-    xm.get_ordinal(),
-    xm.xrt_world_size(),
+    xr.global_ordinal(),
+    xr.world_size(),
     FLAGS.batch_size,
     FLAGS.test_batch_size,
     FLAGS.num_workers,
@@ -70,7 +71,7 @@ def train():
   model = vision_utils.get_model(FLAGS.platform, FLAGS.model, FLAGS.pretrained).to(device)
   writer = None
   if xm.is_master_ordinal():
-    logger = vision_utils.Logger(FLAGS, xm.xrt_world_size())
+    logger = vision_utils.Logger(FLAGS, xr.world_size())
   optimizer = optim.SGD(
       model.parameters(),
       lr=FLAGS.lr,
@@ -79,7 +80,7 @@ def train():
   lr_scheduler = None
   if FLAGS.lr_scheduler_type == "WarmupAndExponentialDecayScheduler":
     num_training_steps_per_epoch = train_dataset_len // (
-        FLAGS.batch_size * xm.xrt_world_size())
+        FLAGS.batch_size * xr.world_size())
     lr_scheduler = vision_utils.WarmupAndExponentialDecayScheduler(
         optimizer,
         num_training_steps_per_epoch,
@@ -88,7 +89,7 @@ def train():
   loss_fn = nn.CrossEntropyLoss()
 
   if is_root:
-    throughput = vision_utils.Throughput(FLAGS.batch_size, xm.xrt_world_size(), FLAGS.log_steps)
+    throughput = vision_utils.Throughput(FLAGS.batch_size, xr.world_size(), FLAGS.log_steps)
     print('--------TRAINING CONFIG----------')
     print(FLAGS)
     print('---------------------------------')
@@ -158,13 +159,13 @@ def train():
       xm.master_print('Max train throughput: {:.4f}'.format(max(logger.train_throughputs)))
     if global_step >= FLAGS.max_steps:
       break
-  
+
   if is_root:
     time_to_train = time.time() - train_start
 
   if FLAGS.do_eval:
     if is_root:
-      throughput = vision_utils.Throughput(FLAGS.batch_size, xm.xrt_world_size(), FLAGS.log_steps)
+      throughput = vision_utils.Throughput(FLAGS.batch_size, xr.world_size(), FLAGS.log_steps)
     accuracy = test_loop_fn(test_device_loader, epoch)
     xm.master_print('Epoch {} test end {}, Accuracy={:.2f}'.format(
         epoch, datetime.now(), accuracy))
@@ -188,7 +189,7 @@ def _mp_fn(index, flags):
 if __name__ == '__main__':
   parser = vision_utils.build_train_parser()
   args = parser.parse_args(sys.argv[1:])
-  
+
   if os.environ.get("WORLD_SIZE"):
     dist.init_process_group('xla')
     _mp_fn(0, args)

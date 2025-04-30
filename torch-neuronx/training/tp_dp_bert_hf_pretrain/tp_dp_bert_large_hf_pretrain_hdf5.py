@@ -52,6 +52,7 @@ import torch_xla.distributed.parallel_loader as pl
 import torch.distributed as dist
 import torch_xla.distributed.xla_multiprocessing as xmp
 import torch_xla.distributed.xla_backend
+import torch_xla.runtime as xr
 import numpy as np
 from transformers import BertForPreTraining
 from transformers.models.bert.modeling_bert import BertSelfAttention, BertSelfOutput
@@ -368,7 +369,7 @@ def get_model(flags):
             self.query = layers.ColumnParallelLinear(config.hidden_size, self.all_head_size, gather_output=False)
             self.key = layers.ColumnParallelLinear(config.hidden_size, self.all_head_size, gather_output=False)
             self.value = layers.ColumnParallelLinear(config.hidden_size, self.all_head_size, gather_output=False)
-            # BERT initializes the model with normal distribution. Here we scale the std, since the weights are 
+            # BERT initializes the model with normal distribution. Here we scale the std, since the weights are
             # sharded
             self.query.weight.data.normal_(
                 mean=0.0, std=config.initializer_range/math.sqrt(parallel_state.get_tensor_model_parallel_size()))
@@ -393,7 +394,7 @@ def get_model(flags):
                 mean=0.0, std=config.initializer_range/math.sqrt(parallel_state.get_tensor_model_parallel_size()))
             with torch.no_grad():
                 self.dense.bias.data.zero_()
-    
+
     for layer in my_model.bert.encoder.layer:
         layer.attention.self = ParallelSelfAttention(my_config)
         layer.attention.output = ParallelSelfOutput(my_config)
@@ -413,11 +414,11 @@ def get_dtype(model) -> str:
             return "torch.bfloat16"
         if "torch.double" in str(model.dtype):
             return "torch.float32"
-    return str(model.dtype)    
-    
+    return str(model.dtype)
+
 def train_bert_hdf5(flags):
     parallel_state.initialize_model_parallel(tensor_model_parallel_size=flags.tensor_parallel_size)
-    rank = xm.get_ordinal()
+    rank = xr.global_ordinal()
     world_size = parallel_state.get_data_parallel_size()
     is_root = xm.is_master_ordinal(local=False)
     extract_graphs_only = os.environ.get("NEURON_EXTRACT_GRAPHS_ONLY", None)
@@ -489,7 +490,7 @@ def train_bert_hdf5(flags):
             {
                 "Model": model.name_or_path,
                 "Model configuration": str(model.config),
-                "World size": xm.xrt_world_size(),
+                "World size": xr.world_size(),
                 "Data parallel degree": world_size,
                 "Batch size": flags.batch_size,
                 "Total steps": flags.steps_this_run,
@@ -866,14 +867,14 @@ if __name__ == "__main__":
         help="Whether to print grad norm",
     )
     parser.add_argument(
-        "--minimal_ckpt", 
-        default=False, 
-        action='store_true', 
+        "--minimal_ckpt",
+        default=False,
+        action='store_true',
         help="When specified, don't store optimizer/lr-schedule states in checkpoints."
     )
     parser.add_argument(
-        "--test_checkpointing", 
-        action='store_true', 
+        "--test_checkpointing",
+        action='store_true',
         help="When specified, validate save and load ccheckpoint"
     )
     parser.add_argument(
@@ -898,7 +899,7 @@ if __name__ == "__main__":
         type=int,
         help="Tensor parallel size"
     )
-    
+
     args = parser.parse_args(sys.argv[1:])
 
     if args.steps_this_run < 0:

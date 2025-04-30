@@ -16,11 +16,11 @@ import pathlib
 import random
 from glob import glob
 from typing import Union
-    
+
 # Neuron
 import torch_xla.core.xla_model as xm
 import torch_neuronx
-    
+
 # General ML stuff
 import torch
 import torch.nn.functional as functional
@@ -56,6 +56,7 @@ import torch.distributed as dist
 import torch_xla.distributed.xla_backend
 import torch_xla.distributed.parallel_loader as xpl
 import torch_xla.distributed.xla_multiprocessing as xmp
+import torch_xla.runtime as xr
 from torch.utils.data.distributed import DistributedSampler
 
 import torch_xla.debug.profiler as xp
@@ -82,7 +83,7 @@ os.environ["NEURON_CC_FLAGS"] = os.environ.get("NEURON_CC_FLAGS", "") + compiler
 # Path to where this file is located
 curr_dir = str(pathlib.Path(__file__).parent.resolve())
 sys.path.append(curr_dir)
-    
+
 image_column_name = "image"
 caption_column_name = "text"
 
@@ -114,7 +115,7 @@ class Throughput:
             self.window_time -= self.moving_avg_window.get()
             window_size -= 1
         return
-    
+
     # Returns the throughput measured over the last moving_avg_window_size steps
     def get_throughput(self):
         throughput = self.moving_avg_window.qsize() * self.inputs_per_training_step / self.window_time
@@ -195,7 +196,7 @@ def save_checkpoint(results_dir, unet, optimizer, epoch, step, cumulative_step):
     # Save optimizer state
     # Under ZeRO optimizer sharding each worker needs to save the optimizer state
     # as each has its own unique state
-    checkpoint_path = os.path.join(results_dir, f"checkpoint-optimizer-epoch_{epoch}-step_{step}-cumulative_train_step_{cumulative_step}-rank_{xm.get_ordinal()}.pt")
+    checkpoint_path = os.path.join(results_dir, f"checkpoint-optimizer-epoch_{epoch}-step_{step}-cumulative_train_step_{cumulative_step}-rank_{xr.global_ordinal()}.pt")
     xm.master_print(f"Saving optimizer state checkpoint to {checkpoint_path} (other ranks will ahve each saved their own state checkpoint)")
     data = {
         'epoch': epoch,
@@ -223,7 +224,7 @@ def load_checkpoint(results_dir, unet, optimizer, device, resume_step):
     if resume_step is None:
         resume_step = "*"
     unet_checkpoint_filenames = glob(os.path.join(results_dir, f"checkpoint-unet-epoch_*-step_*-cumulative_train_step_{resume_step}.pt"))
-    optimizer_checkpoint_filenames = glob(os.path.join(results_dir, f"checkpoint-optimizer-epoch_*-step_*-cumulative_train_step_{resume_step}-rank_{xm.get_ordinal()}.pt"))
+    optimizer_checkpoint_filenames = glob(os.path.join(results_dir, f"checkpoint-optimizer-epoch_*-step_*-cumulative_train_step_{resume_step}-rank_{xr.global_ordinal()}.pt"))
 
     unet_checkpoint_filenames.sort()
     optimizer_checkpoint_filenames.sort()
@@ -257,7 +258,7 @@ def load_checkpoint(results_dir, unet, optimizer, device, resume_step):
 # Seed various RNG sources that need to be seeded to make training deterministic
 # WARNING: calls xm.rendezvous() internally
 def seed_rng(device):
-    LOCAL_RANK = xm.get_ordinal()
+    LOCAL_RANK = xr.global_ordinal()
     xm.rendezvous('start-seeding-cpu')
     torch.manual_seed(9999 + LOCAL_RANK)
     random.seed(9999+ LOCAL_RANK)
@@ -281,7 +282,7 @@ def seed_rng(device):
 ################################################################################
 
 def train(args):
-    LOCAL_RANK = xm.get_ordinal()
+    LOCAL_RANK = xr.global_ordinal()
 
     # Create all the components of our model pipeline and training loop
     xm.master_print('Building training loop components')
@@ -303,18 +304,18 @@ def train(args):
     text_encoder = CLIPTextModel.from_pretrained(model_id, subfolder="text_encoder")
     vae = AutoencoderKL.from_pretrained(model_id, subfolder="vae")
 
-    unet = UNet2DConditionModel.from_pretrained(model_id, subfolder="unet")    
+    unet = UNet2DConditionModel.from_pretrained(model_id, subfolder="unet")
     unet.requires_grad_(True)
 
     xm.master_print("Enabling gradient checkpointing")
     unet.enable_gradient_checkpointing()
-    
+
     optim_params = unet.parameters()
 
     # IMPORTANT: need to move unet to device before we create the optimizer for the optimizer to be training the right parameters (on-device)
     unet.train()
     unet.to(device)
-    
+
     # Setup VAE and text encoder
     text_encoder.requires_grad_(False)
     text_encoder.eval()
@@ -362,7 +363,7 @@ def train(args):
 
         loss_f = open(loss_filename, 'w')
         loss_f.write("RANK EPOCH STEP LOSS\n")
-    
+
     xm.rendezvous('done-loading-checkpoint')
 
     lr_scheduler = get_scheduler(
@@ -378,7 +379,7 @@ def train(args):
     for component in components:
         total_parameters += sum([np.prod(p.size()) * p.element_size() for p in component.parameters()]) / (1024 ** 2)
     xm.master_print('Total parameters: %.3fMB' % total_parameters)
-    
+
     # Preprocess the dataset
     column_names = dataset["train"].column_names
     if image_column_name not in column_names:
@@ -389,7 +390,7 @@ def train(args):
         raise ValueError(
             f"Did not find '{caption_column_name}' in dataset's 'column_names'"
         )
-    
+
     resolution = args.resolution
     training_transforms = transforms.Compose(
         [
@@ -400,7 +401,7 @@ def train(args):
             transforms.Normalize([0.5], [0.5]),
         ]
     )
-    
+
     def tokenize_captions(examples, is_train=True):
         captions = []
         for caption in examples[caption_column_name]:
@@ -417,16 +418,16 @@ def train(args):
             captions, max_length=tokenizer.model_max_length, padding="max_length", truncation=True, return_tensors="pt"
         )
         return inputs.input_ids
-    
+
     def preprocess_train(examples):
         images = [image.convert("RGB") for image in examples[image_column_name]]
         examples["pixel_values"] = [training_transforms(image) for image in images]
         examples["input_ids"] = tokenize_captions(examples)
         return examples
-    
+
     train_dataset = dataset["train"].with_transform(preprocess_train)
     args.dataset_size = len(train_dataset)
-    
+
     def collate_fn(examples):
         pixel_values = torch.stack([example["pixel_values"] for example in examples])
         # Set to double so that bf16 autocast keeps it as fp32
@@ -435,12 +436,12 @@ def train(args):
         return {"pixel_values": pixel_values, "input_ids": input_ids}
 
     # Create dataloaders
-    world_size = xm.xrt_world_size()
+    world_size = xr.world_size()
     train_sampler = None
     if world_size > 1:
         train_sampler = DistributedSampler(train_dataset,
                                            num_replicas=world_size,
-                                           rank=xm.get_ordinal(),
+                                           rank=xr.global_ordinal(),
                                            shuffle=True)
 
     # drop_last=True needed to avoid cases of an incomplete final batch, which would result in new graphs being cut and compiled
@@ -449,7 +450,7 @@ def train(args):
     )
 
     train_device_loader = xpl.MpDeviceLoader(train_dataloader, device, device_prefetch_size=2)
-    
+
     xm.master_print('Entering training loop')
     xm.rendezvous('training-loop-start')
 
@@ -472,7 +473,7 @@ def train(args):
 
             xm.master_print(f"*** Running epoch {epoch} step {step} (cumulative step {cumulative_train_step})")
             start_time = time.perf_counter_ns()
-    
+
             # Convert input image to latent space and add noise
             with torch.no_grad():
                 vae_inputs_batched = batch['pixel_values']
@@ -503,22 +504,22 @@ def train(args):
                 noise = torch.randn(latents.size(), dtype=latents.dtype, layout=latents.layout, device='cpu')
                 noise = noise.to(device=device)
                 bsz = latents.shape[0]
-        
+
                 timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,))
                 timesteps = timesteps.to(device=device)
-        
+
                 noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
-    
+
                 # Run text encoder on caption
                 encoder_hidden_states = text_encoder(batch["input_ids"])[0]
-            
+
                 target = noise
 
             # UNet forward pass
             model_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
             # Calculate loss
             loss = functional.mse_loss(model_pred.float(), target.float(), reduction="mean")
-    
+
             # Add in extra mark_steps to split the model into FWD / BWD / optimizer - helps with compiler QoR and thus
             # model fit
             # TODO: parametrize how the script splits the model
@@ -567,7 +568,7 @@ def train(args):
 
         if args.save_model_epochs is not None and epoch % args.save_model_epochs == 0 and not os.environ.get("NEURON_EXTRACT_GRAPHS_ONLY", None):
             save_pipeline(args.results_dir + f"-EPOCH_{epoch}", args.model_id, unet, vae, text_encoder)
-        
+
         end_epoch_time = time.perf_counter_ns()
         xm.master_print(f" Entire epoch {epoch} took {(end_epoch_time - start_epoch_time) / (10 ** 9)} s")
         xm.master_print(f" Given {step + 1} many steps, e2e per iteration is {(end_epoch_time - start_epoch_time) / (step + 1) / (10 ** 6)} ms")
@@ -586,7 +587,7 @@ def train(args):
     loss_f.close()
 
     xm.master_print(f"!!! Finished all epochs")
-     
+
     # However, I may need to block here to await the async? How to do that???
     xm.wait_device_ops()
 
@@ -669,7 +670,7 @@ if __name__ == "__main__":
     args.results_dir = results_dir
 
     dist.init_process_group('xla')
-    world_size = xm.xrt_world_size()
+    world_size = xr.world_size()
 
     args.world_size = world_size
 
@@ -688,7 +689,7 @@ if __name__ == "__main__":
     xm.master_print(f"XLA_IR_DEBUG: {os.getenv('XLA_IR_DEBUG', None)}")
     xm.master_print(f"XLA_HLO_DEBUG: {os.getenv('XLA_HLO_DEBUG', None)}")
     xm.master_print(f"XLA_DOWNCAST_BF16: {os.getenv('XLA_DOWNCAST_BF16', None)}")
-    
+
     xm.rendezvous("Entering training function")
 
     train(args)
