@@ -79,6 +79,7 @@ from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP
 from torch_xla.distributed.fsdp.wrap import transformer_auto_wrap_policy
 import torch_xla.distributed.xla_backend
 from torch_xla.distributed.zero_redundancy_optimizer import ZeroRedundancyOptimizer
+import torch_xla.runtime as xr
 from neuron_utils import *
 from accelerate.utils.imports import is_tpu_available
 
@@ -234,8 +235,8 @@ def main():
 
     torch.distributed.init_process_group('xla')
     device = xm.xla_device()
-    rank = xm.get_ordinal()
-    world_size = xm.xrt_world_size()
+    rank = xr.global_ordinal()
+    world_size = xr.world_size()
 
     print(f'rank: {rank}, world size {world_size}')
 

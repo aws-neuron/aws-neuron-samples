@@ -9,6 +9,7 @@ from torchvision.transforms import ToTensor
 
 # XLA imports
 import torch_xla.core.xla_model as xm
+import torch_xla.runtime as xr
 
 # XLA imports for parallel loader and multi-processing
 import torch_xla.distributed.parallel_loader as pl
@@ -31,7 +32,7 @@ if xm.is_master_ordinal(): xm.rendezvous('dataset_download')
 
 def main():
     # XLA MP: get world size
-    world_size = xm.xrt_world_size()
+    world_size = xr.world_size()
     # multi-processing: ensure each worker has same initial weights
     torch.manual_seed(0)
 
@@ -47,7 +48,7 @@ def main():
     if world_size > 1:
         train_sampler = DistributedSampler(train_dataset,
                                            num_replicas=world_size,
-                                           rank=xm.get_ordinal(),
+                                           rank=xr.global_ordinal(),
                                            shuffle=True)
     train_loader = DataLoader(train_dataset,
                               batch_size=BATCH_SIZE,

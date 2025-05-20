@@ -9,6 +9,7 @@ import torch
 import torch_xla.core.xla_model as xm
 import torch_xla.distributed.parallel_loader as pl
 import torch_xla.distributed.xla_backend
+import torch_xla.runtime as xr
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
@@ -26,7 +27,7 @@ device = "xla"
 torch.distributed.init_process_group(device)
 
 # Get the global number of workes.
-world_size = xm.xrt_world_size()
+world_size = xr.world_size()
 logger.info("Workers: {}".format(world_size))
 
 batch_size = 8
@@ -71,7 +72,7 @@ if __name__ == '__main__':
         train_sampler = DistributedSampler(
             ds_encoded["train"],
             num_replicas=world_size,
-            rank=xm.get_ordinal(),
+            rank=xr.global_ordinal(),
             shuffle=True,
         )
 
@@ -110,7 +111,7 @@ if __name__ == '__main__':
             xm.optimizer_step(optimizer)
             progress_bar.update(1)
 
-        logger.info("Epoch {}, rank {}, Loss {:0.4f}".format(epoch, xm.get_ordinal(), loss.detach().to("cpu")))
+        logger.info("Epoch {}, rank {}, Loss {:0.4f}".format(epoch, xr.global_ordinal(), loss.detach().to("cpu")))
 
     logger.info("End training: {}".format(strftime("%Y-%m-%d %H:%M:%S", gmtime())))
 
