@@ -15,6 +15,7 @@ import torch_xla.distributed.parallel_loader as pl
 import torch_xla.utils.utils as xu
 import torch_xla.core.xla_model as xm
 import torch_xla.distributed.xla_multiprocessing as xmp
+import torch_xla.runtime as xr
 from torchvision import transforms as T
 from PIL import Image
 import glob
@@ -71,8 +72,8 @@ def train():
     train_loader, test_loader = vision_utils.create_data_loaders(
         train_dataset,
         test_dataset,
-        xm.get_ordinal(),
-        xm.xrt_world_size(),
+        xr.global_ordinal(),
+        xr.world_size(),
         FLAGS.batch_size,
         FLAGS.test_batch_size,
         FLAGS.num_workers,
@@ -84,12 +85,12 @@ def train():
     model = UNet(n_channels=3, n_classes=1, bilinear=False).to(device)
     writer = None
     if xm.is_master_ordinal():
-        logger = vision_utils.Logger(FLAGS, xm.xrt_world_size())
+        logger = vision_utils.Logger(FLAGS, xr.world_size())
     optimizer = torch.optim.AdamW(model.parameters(), lr=FLAGS.lr, betas=(0.9, 0.999), weight_decay=1e-2, eps=1e-08)
     loss_fn = nn.CrossEntropyLoss() if model.n_classes > 1 else nn.BCEWithLogitsLoss()
 
     if is_root:
-        throughput = vision_utils.Throughput(FLAGS.batch_size, xm.xrt_world_size(), FLAGS.log_steps)
+        throughput = vision_utils.Throughput(FLAGS.batch_size, xr.world_size(), FLAGS.log_steps)
         train_start = time.time()
 
     def train_loop_fn(loader, epoch, global_step):
@@ -157,7 +158,7 @@ def train():
 
     if FLAGS.do_eval:
         if is_root:
-            throughput = vision_utils.Throughput(FLAGS.batch_size, xm.xrt_world_size(), FLAGS.log_steps)
+            throughput = vision_utils.Throughput(FLAGS.batch_size, xr.world_size(), FLAGS.log_steps)
         accuracy = test_loop_fn(test_device_loader, epoch)
         xm.master_print('Epoch {} test end {}, Accuracy(Dice_score)={:.2f}'.format(
             epoch, datetime.now(), accuracy))
@@ -182,7 +183,7 @@ def _mp_fn(index, flags):
 if __name__ == '__main__':
     parser = vision_utils.build_train_parser()
     args = parser.parse_args(sys.argv[1:])
-    
+
     if os.environ.get("WORLD_SIZE"):
         dist.init_process_group('xla')
         _mp_fn(0, args)

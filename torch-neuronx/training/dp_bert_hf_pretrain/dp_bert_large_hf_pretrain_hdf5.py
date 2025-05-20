@@ -52,6 +52,7 @@ import torch.distributed as dist
 import torch_xla.utils.utils as xu
 import torch_xla.distributed.xla_multiprocessing as xmp
 import torch_xla.distributed.xla_backend
+import torch_xla.runtime as xr
 import torch_xla.test.test_utils as test_utils
 import numpy as np
 from transformers import BertForPreTraining
@@ -243,9 +244,9 @@ def extract_mfu(num_layers, hidden_size, sequence_len, batch_size, average_throu
     tflops_per_seq = flops_per_seq / 10**12
     tflops_per_sec_per_worker = tflops_per_seq * average_throughput/world_size
     if '--auto-cast=none' in os.getenv('NEURON_CC_FLAGS', default='') and model_dtype == 'torch.float32':
-        hw_tflops_per_worker = 760/32 
+        hw_tflops_per_worker = 760/32
     else:
-        hw_tflops_per_worker = 3040/32 
+        hw_tflops_per_worker = 3040/32
     return tflops_per_sec_per_worker/hw_tflops_per_worker * 100
 
 # fix NVidia checkpoint param names to match HF
@@ -276,8 +277,8 @@ def get_dtype(model) -> str:
     return str(model.dtype)
 
 def train_bert_hdf5(flags):
-    rank = xm.get_ordinal()
-    world_size = xm.xrt_world_size()
+    rank = xr.global_ordinal()
+    world_size = xr.world_size()
     is_root = xm.is_master_ordinal(local=False)
     extract_graphs_only = os.environ.get("NEURON_EXTRACT_GRAPHS_ONLY", None)
     set_seed(flags.seed)
@@ -341,7 +342,7 @@ def train_bert_hdf5(flags):
             os.makedirs(flags.output_dir, exist_ok=True)
         if not extract_graphs_only:
             logger = Logger(flags, world_size, model_dtype)
-        throughput = Throughput(flags.batch_size, xm.xrt_world_size(), flags.grad_accum_usteps)
+        throughput = Throughput(flags.batch_size, xr.world_size(), flags.grad_accum_usteps)
         print('--------TRAINING CONFIG----------')
         print(flags)
         print('--------MODEL CONFIG----------')
@@ -378,10 +379,10 @@ def train_bert_hdf5(flags):
                 capture_ranks = []  # empty list means all ranks
             else:
                 capture_ranks = [int(i) for i in flags.snapshot_rank_list.split(",")]
-            if capture_ranks == [] or xm.get_ordinal() in capture_ranks:
+            if capture_ranks == [] or xr.global_ordinal() in capture_ranks:
                 capture_steps = [int(i) for i in flags.snapshot_step_list.split(",")]
                 if is_pt21_plus:
-                    print(f"Enabling snapshotting for rank{xm.get_ordinal()} and steps {capture_steps}")
+                    print(f"Enabling snapshotting for rank{xr.global_ordinal()} and steps {capture_steps}")
                     def callback(name, addressable_device_index, execution_count):
                         if total_steps in capture_steps:
                             return 'inputs outputs'
@@ -436,7 +437,7 @@ def train_bert_hdf5(flags):
                         if flags.print_grad_norm:
                             total_norm_cpu = total_norm.cpu().item()
                         #NOTE: The running_loss is the loss of the global_step
-                        logger.log(epoch, global_step, running_loss_reduced_detached.cpu().item(), optimizer.param_groups[0]['lr'], 
+                        logger.log(epoch, global_step, running_loss_reduced_detached.cpu().item(), optimizer.param_groups[0]['lr'],
                                 throughput.get_throughput(), total_norm_cpu)
                 xm.add_step_closure(_print_logs, (running_loss_reduced_detached, total_norm.detach()))
                 if global_step >= flags.steps_this_run:
@@ -607,14 +608,14 @@ def train_bert_hdf5(flags):
                     if os.path.exists(compile_time_file):
                         with open(compile_time_file, "r") as f:
                             compile_time = float(f.readline())
-                    elif os.path.exists("slurm-wrap-1.txt"):      
-                        time_for_workers = []    
+                    elif os.path.exists("slurm-wrap-1.txt"):
+                        time_for_workers = []
                         with open('slurm-wrap-1.txt', 'r') as file:
                             print('collecting compile_time for pcluster workers log')
-                            for w in file:      
+                            for w in file:
                                 if re.search('compilation_time', w):
                                     time_for_workers.append(float(w.split(':')[1].strip()))
-                        compile_time = max(time_for_workers)    
+                        compile_time = max(time_for_workers)
                     # record aggregate & final statistics in the metrics file
                     additional_data = {
                         "Epoch": epoch, "Global step": global_step, "Microstep": training_ustep
@@ -666,7 +667,7 @@ def init_process_group():
 def _mp_fn(index, flags):
     # If using xmp.spawn still need to init process group
     if not dist.is_torchelastic_launched():
-        init_process_group()            
+        init_process_group()
     torch.set_default_tensor_type('torch.FloatTensor')
     train_bert_hdf5(flags)
     xm.rendezvous("_mp_fn finished")
