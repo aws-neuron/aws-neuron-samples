@@ -31,6 +31,12 @@ import random
 from itertools import chain
 from pathlib import Path
 
+# we need to use the torch_xla checkpoint. Otherwise the some checkpointing patterns will be eliminated by the compiler common expression elimination
+from torch_xla.utils.checkpoint import checkpoint
+import torch.utils.checkpoint
+torch.utils.checkpoint.checkpoint = checkpoint
+
+
 import torch_neuronx
 import datasets
 import torch
@@ -81,25 +87,7 @@ import torch_xla.distributed.xla_backend
 from torch_xla.distributed.zero_redundancy_optimizer import ZeroRedundancyOptimizer
 import torch_xla.runtime as xr
 from neuron_utils import *
-from accelerate.utils.imports import is_tpu_available
-
-# Work around `Check failed: tensor_data`` error in torch-neuronx 2.1 when using torch.utils.data.DataLoader with shuffle=True
-import copy
-import torch_xla.core.xla_model as xm
-def mesh_reduce(tag, data, reduce_fn):
-    xm.rendezvous(tag)
-    xdatain = copy.deepcopy(data)
-    xdatain = xdatain.to("xla")
-    xdata = xm.all_gather(xdatain, pin_layout=False)
-    cpu_xdata = xdata.detach().to("cpu")
-    cpu_xdata_split = torch.split(cpu_xdata, xdatain.shape[0])
-    xldata = [x for x in cpu_xdata_split]
-    xm.mark_step()
-    return reduce_fn(xldata)
-xm.mesh_reduce = mesh_reduce
-
-# we need to use the torch_xla checkpoint. Otherwise the some checkpointing patterns will be eliminated by the compiler common expression elimination
-torch.utils.checkpoint.checkpoint = torch_xla.utils.checkpoint.checkpoint
+from accelerate.utils.imports import is_torch_xla_available
 
 try:
     from utilities.reporting import Metric, post_metrics
@@ -404,7 +392,6 @@ def main():
             "max_length": args.block_size,
             #"fused_scaled_masked_softmax": True, #args.fused_scaled_masked_softmax,
             #"fused_gelu": args.fused_gelu,
-            "gradient_checkpointing": args.gradient_checkpointing,
             "use_cache": not args.gradient_checkpointing,
         }
         if args.use_zero1:
@@ -419,6 +406,8 @@ def main():
         )
         # remove model = model.to('xla') before FSDP wrapper, so that the sharding will happen in CPU and only the sharded tensor will be sent to device
         # model = model.to('xla')
+        if args.gradient_checkpointing:
+             model.gradient_checkpointing_enable()
 
         model_dtype = get_dtype(model)
         extract_graphs_only = os.environ.get("NEURON_EXTRACT_GRAPHS_ONLY", None)
@@ -603,7 +592,7 @@ def main():
     )
 
     # On TPU, the tie weights in our model have been disconnected, so we need to restore the ties.
-    if accelerator.distributed_type == DistributedType.TPU:
+    if accelerator.distributed_type == DistributedType.XLA:
         model.tie_weights()
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.

@@ -71,7 +71,7 @@ if [ $GRAD_ACCUM_STEP -gt 1 ]; then
     ./uncomment_gradaccum.sh
 fi
 
-MAX_STEPS=100000
+MAX_STEPS=3000
 LOG_FILE_NAME="run_log_hf_gpt2_param_"$MODEL_SIZE"_nodes"$WORLD_SIZE_JOB"_grad_accum"$GRAD_ACCUM_STEP"_bs"$BATCH_SIZE_$(date +"%m-%d-%Y")_$(date +"%H:%M:%S")
 if [[ "$NEURON_EXTRACT_GRAPHS_ONLY" == "1" ]]; then
     MAX_STEPS=10
