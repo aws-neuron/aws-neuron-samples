@@ -4,9 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-
-
-from .s3 import download_from_s3
+from utils.s3 import download_from_s3
 
 
 class ArtifactManager:

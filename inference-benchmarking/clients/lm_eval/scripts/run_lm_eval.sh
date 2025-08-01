@@ -33,6 +33,15 @@ else
     echo "Starting lm_eval without chat completions"
 fi
 
+# Handle Coding tasks
+if [ "$task_name" = "mbpp" ]; then
+    echo "Coding Task"
+    export HF_ALLOW_CODE_EVAL=1
+    additional_args="${additional_args} --confirm_run_unsafe_code"
+else
+    echo "Non-coding task"
+fi
+
 # Common arguments with dynamic endpoint
 common_args=(
     "--tasks ${task_name}"
@@ -40,6 +49,7 @@ common_args=(
     "--log_samples"
     "--output_path ${results_dir}"
     "--limit ${limit}"
+    "--fewshot_as_multiturn"
 )
 
 # Execute the command
