@@ -5,3 +5,5 @@ openai
 transformers
 psutil
 botocore
+pyarrow==20.0.0
+pydantic>2.10

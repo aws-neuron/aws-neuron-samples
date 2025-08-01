@@ -14,8 +14,7 @@ from typing import List, Tuple, Union
 import psutil
 import requests
 
-import sys
-sys.path.append("../")
+from utils.tee_output import TeeOutput
 
 from utils import (
     check_server_terminated,
@@ -27,14 +26,6 @@ from utils import (
 
 LARGE_LLM_LIST = ["dbrx", "llama-3.3-70B", "llama-3.1-405b"]
 
-
-def create_log_with_timestamp(base_path, prefix):
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_dir = Path(base_path)
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / f"{prefix}_{timestamp}.log"
-    print(f"Creating log file at: {log_file}")
-    return log_file
 
 class VLLMServer:
     """Managing VLLM server deployment"""
@@ -175,9 +166,6 @@ class VLLMServer:
 
             vllm_start_script = self.scripts_dir / "start_server.sh"
 
-            log_file = create_log_with_timestamp(
-                base_path="logs/vllm_server", prefix=f"vllm_server_{self.name}"
-            )
             args = [
                 "/bin/bash",
                 str(vllm_start_script),
@@ -188,7 +176,6 @@ class VLLMServer:
                 str(self.cont_batch_size),
                 str(self.tp_degree),
                 str(self.n_vllm_threads),
-                str(log_file),
             ]
 
             # Add optional arguments with parameter names
@@ -202,7 +189,16 @@ class VLLMServer:
                     ]
                 )
             if self.custom_chat_template_path is not None:
-                args.extend(["--chat-template", self.custom_chat_template_path])
+                args.extend(
+                    [
+                        "--chat-template",
+                        (
+                            str(Path(__file__).parent / "scripts" / "prompt-template.jinja")
+                            if self.custom_chat_template_path == "default"
+                            else self.custom_chat_template_path
+                        ),
+                    ]
+                )
             if self.quant_dtype is not None:
                 assert (
                     self.quantization_param_path is not None
@@ -241,12 +237,16 @@ class VLLMServer:
                     {"logical_neuron_cores": self.logical_neuron_cores}
                 )
             if self.override_neuron_config:
-                args.extend(["--override-neuron-config", json.dumps(self.override_neuron_config)])
+                args.extend(
+                    ["--override-neuron-config", f"'{json.dumps(self.override_neuron_config)}'"]
+                )
 
+            # Start server
+            # NOTE: this step includes compilation if model is not compiled outside Vllm
+            args.append("2>&1 | tee -a server_out.txt")
+            print("command: ", " ".join(args))
             process = subprocess.Popen(
-                args,
-                text=True,
-                stderr=subprocess.STDOUT,
+                " ".join(args), text=True, stderr=subprocess.STDOUT, shell=True
             )
             # Wait a bit for the server to start.
             # Sometimes server start can throw the following error if it wasn't terminated gracefully in a prior run. NRT (Neuron Runtime) can get confused in such cases and not have cores available

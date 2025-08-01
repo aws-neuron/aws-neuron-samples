@@ -6,10 +6,9 @@ max_seq_len=${4:-2048}
 cont_batch_size=${5:-32}
 tp_size=${6:-32}
 n_threads=${7:-32}
-file_path="${8:-/home/ubuntu/vllmlogs.log}"
 
 # Shift positional arguments out of the way before parsing named arguments
-shift 8
+shift 7
 set -x
 
 # Default value for override_neuron_config
@@ -25,6 +24,7 @@ while [[ "$#" -gt 0 ]]; do
         --max-num-batched-tokens) max_num_batched_tokens="$2"; shift ;;
         --block-size) block_size="$2"; shift ;;
         --num-gpu-blocks-override) num_gpu_blocks_override="$2"; shift ;;
+        --enable-prefix-caching) enable_prefix_caching="$2"; shift ;;
         --override-neuron-config) override_neuron_config="$2"; shift ;;
         *) echo "Unknown parameter: $1"; exit 1 ;;  # Handle unknown parameters
     esac
@@ -60,20 +60,38 @@ cmd_args=(
     cmd_args+=(--num-gpu-blocks-override "${num_gpu_blocks_override}")
 }
 
-# Conditionally add override config args
-if [[ "${override_neuron_config}" != "{}" ]]; then
-    cmd_args+=(--override-neuron-config "${override_neuron_config}")
-fi
+# Conditionally add prefix caching related settings.
+[ -n "$enable_prefix_caching" ] && {
+    echo "Setting prefix caching args"
+    cmd_args+=(--enable-prefix-caching )
+    cmd_args+=(--block-size "${block_size}")
+    cmd_args+=(--num-gpu-blocks-override "${num_gpu_blocks_override}")
+}
+
+cmd_args+=(--override-neuron-config "${override_neuron_config}")
 
 [ -n "$chat_template" ] && cmd_args+=(--chat-template "${chat_template}")
 
 echo "Starting VLLM Server for model: ${model_id}"
 
-export NEURON_RT_DBG_RDH_CC=0
 export NEURON_RT_INSPECT_ENABLE=0
+export NEURON_RT_NUMERICAL_ERRORS_VERBOSITY=none
 export XLA_HANDLE_SPECIAL_SCALAR=1
 export UNSAFE_FP8FNCAST=1
 export VLLM_NEURON_FRAMEWORK="neuronx-distributed-inference"
+export VLLM_RPC_TIMEOUT=100000
+
+# List the dependencies
+echo "======================"
+echo "Whl Dependencies:"
+pip list | grep neuron
+echo "======================"
+echo "System Dependencies:"
+dpkg -l | grep neuron
+echo "======================"
+echo "Environment Variables:"
+env
+echo "======================"
 
 # Execute the command with all arguments
-python3 -m vllm.entrypoints.openai.api_server "${cmd_args[@]}" 2>&1 | tee ${file_path}
+python3 -m vllm.entrypoints.openai.api_server "${cmd_args[@]}"

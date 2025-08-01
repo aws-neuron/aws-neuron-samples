@@ -3,16 +3,15 @@ from typing import Any, Dict
 
 import yaml
 
-import sys
-sys.path.append("../")
-
 from accuracy import AccuracyScenario
+from performance import PerformanceScenario
 from server_config import ServerConfig
 
 
 @dataclass
 class TestConfig:
     accuracy: Dict[str, AccuracyScenario] = field(default_factory=dict)
+    performance: Dict[str, PerformanceScenario] = field(default_factory=dict)
     upload_artifacts: bool = False
 
     def __post_init__(self):
@@ -33,6 +32,10 @@ class ConfigParser:
             accuracy={
                 name: AccuracyScenario(**scenario_config)
                 for name, scenario_config in config["test"].get("accuracy", {}).items()
+            },
+            performance={
+                name: PerformanceScenario(**scenario_config)
+                for name, scenario_config in config["test"].get("performance", {}).items()
             },
         )
 

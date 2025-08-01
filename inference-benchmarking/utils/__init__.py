@@ -5,6 +5,7 @@ from .process import (
     kill_process_and_children,
 )
 from .s3 import S3Utils, download_from_s3, get_instance_region
+from .tee_output import create_log_with_timestamp
 
 __all__ = [
     # S3 utilities
@@ -16,4 +17,5 @@ __all__ = [
     "is_port_available",
     "find_free_port",
     "check_server_terminated",
+    "create_log_with_timestamp",
 ]

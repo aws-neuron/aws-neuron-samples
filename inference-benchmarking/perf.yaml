@@ -1,0 +1,25 @@
+server:
+  name: "llama-3.3-70b-instruct"
+  model_path: "/home/ubuntu/models/llama-3.3-70b-instruct"
+  model_s3_path: null
+  compiled_model_path: "/home/ubuntu/traced_models/llama-3.3-70b-instruct"
+  max_seq_len: 256
+  context_encoding_len: 128
+  tp_degree: 32
+  server_port: 8000
+  continuous_batch_size: 1
+  custom_chat_template_path: "default"
+
+test:
+  performance:
+    sonnets_small_test:
+      client: "llm_perf"
+      client_type: "llm_perf_github_patched"
+      n_batches: 1
+      max_concurrent_requests: 20
+      timeout: 3600
+      input_size: 128
+      output_size: 124
+      client_params:
+        stddev_input_tokens: 0
+        stddev_output_tokens: 1

@@ -7,6 +7,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 
+def safe_round(value):
+    try:
+        return round(float(value) * 100, 5)
+    except (ValueError, TypeError):
+        return value
+
+
 class LMEvalClient:
     """LM-Eval accuracy evaluation client"""
 
@@ -19,6 +26,11 @@ class LMEvalClient:
         result = subprocess.run(["/bin/bash", str(setup_script)], check=True)
         if result.returncode != 0:
             raise RuntimeError("Failed to setup LM-Eval client")
+
+        # Copy gated datasets from s3 to ~/.cache/huggingface/datasets/
+        os.system(
+            f"aws s3 sync --region=us-west-2 s3://kaena-nn-models/bat-accuracy-datasets/Idavidrein___gpqa/ ~/.cache/huggingface/datasets/Idavidrein___gpqa/ --only-show-errors"
+        )
 
     def evaluate(
         self,
@@ -62,13 +74,20 @@ class LMEvalClient:
             str(timeout),
             str(limit),
             str(use_chat).lower(),  # Convert to lowercase string for shell script
+            "2>&1 | tee -a client_out.txt",
         ]
 
         try:
-            result = subprocess.run(cmd, timeout=timeout, check=True)
+            result = subprocess.run(
+                " ".join(cmd), timeout=timeout, stderr=subprocess.STDOUT, text=True, shell=True
+            )
             if result.returncode != 0:
                 raise RuntimeError("LM-Eval evaluation failed")
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(f"Evaluation timed out after {timeout} seconds")
 
+        # Process and return the results
+        try:
             results_file = self.get_latest_results_file(results_dir)
             if os.path.exists(results_file):
                 with open(results_file, "r") as f:
@@ -77,8 +96,6 @@ class LMEvalClient:
             else:
                 raise FileNotFoundError(f"Results file not found: {results_file}")
 
-        except subprocess.TimeoutExpired:
-            raise RuntimeError(f"Evaluation timed out after {timeout} seconds")
         except FileNotFoundError:
             raise RuntimeError(f"Results file not found: {results_file}")
         except json.JSONDecodeError:
@@ -92,23 +109,82 @@ class LMEvalClient:
         """Extract relevant metrics based on task type"""
         metrics_map = {}
         for subject_name, subject_result in results["results"].items():
-            if "exact_match,strict-match" not in subject_result:
-                continue
-            metric_data = {
-                "AccuracyExactMatchStrictMatch": round(
-                    subject_result["exact_match,strict-match"] * 100, 5
-                ),
-                "AccuracyExactMatchStrictMatchStderr": round(
-                    subject_result["exact_match_stderr,strict-match"] * 100, 5
-                ),
-                "AccuracyExactMatchFlexibleExtract": round(
-                    subject_result["exact_match,flexible-extract"] * 100, 5
-                ),
-                "AccuracyExactMatchFlexibleExtractStderr": round(
-                    subject_result["exact_match_stderr,flexible-extract"] * 100, 5
-                ),
-            }
-            metrics_map[subject_name] = metric_data
+            if "exact_match,strict-match" in subject_result:
+                metrics_map[subject_name] = {
+                    "score": safe_round(subject_result["exact_match,flexible-extract"]),
+                    "exact_match,strict-match": safe_round(
+                        subject_result["exact_match,strict-match"]
+                    ),
+                    "exact_match_stderr,strict-match": safe_round(
+                        subject_result["exact_match_stderr,strict-match"]
+                    ),
+                    "exact_match,flexible-extract": safe_round(
+                        subject_result["exact_match,flexible-extract"]
+                    ),
+                    "exact_match_stderr,flexible-extract": safe_round(
+                        subject_result["exact_match_stderr,flexible-extract"]
+                    ),
+                }
+            elif "prompt_level_strict_acc,none" in subject_result:
+                metrics_map[subject_name] = {
+                    "score": safe_round(
+                        (
+                            subject_result["prompt_level_strict_acc,none"]
+                            + subject_result["inst_level_strict_acc,none"]
+                        )
+                        / 2
+                    ),
+                    "prompt_level_strict_acc,none": safe_round(
+                        subject_result["prompt_level_strict_acc,none"]
+                    ),
+                    "prompt_level_strict_acc_stderr,none": safe_round(
+                        subject_result["prompt_level_strict_acc_stderr,none"]
+                    ),
+                    "inst_level_strict_acc,none": safe_round(
+                        subject_result["inst_level_strict_acc,none"]
+                    ),
+                    "prompt_level_loose_acc,none": safe_round(
+                        subject_result["prompt_level_loose_acc,none"]
+                    ),
+                    "prompt_level_loose_acc_stderr,none": safe_round(
+                        subject_result["prompt_level_loose_acc_stderr,none"]
+                    ),
+                    "inst_level_loose_acc,none": safe_round(
+                        subject_result["inst_level_loose_acc,none"]
+                    ),
+                }
+            elif "exact_match,none" in subject_result:
+                metrics_map[subject_name] = {
+                    "score": safe_round(subject_result["exact_match,none"]),
+                    "exact_match,none": safe_round(subject_result["exact_match,none"]),
+                    "exact_match_stderr,none": safe_round(
+                        subject_result["exact_match_stderr,none"]
+                    ),
+                }
+            elif "pass_at_1,none" in subject_result:
+                metrics_map[subject_name] = {
+                    "score": safe_round(subject_result["pass_at_1,none"]),
+                    "pass_at_1,none": safe_round(subject_result["pass_at_1,none"]),
+                    "pass_at_1_stderr,none": safe_round(subject_result["pass_at_1_stderr,none"]),
+                }
+            elif "exact_match,get-answer" in subject_result:
+                metrics_map[subject_name] = {
+                    "score": safe_round(subject_result["exact_match,get-answer"]),
+                    "exact_match,get-answer": safe_round(subject_result["exact_match,get-answer"]),
+                    "exact_match_stderr,get-answer": safe_round(
+                        subject_result["exact_match_stderr,get-answer"]
+                    ),
+                }
+            elif "exact_match,custom-extract" in subject_result:
+                metrics_map[subject_name] = {
+                    "score": safe_round(subject_result["exact_match,custom-extract"]),
+                    "exact_match,custom-extract": safe_round(
+                        subject_result["exact_match,custom-extract"]
+                    ),
+                    "exact_match_stderr,custom-extract": safe_round(
+                        subject_result["exact_match_stderr,custom-extract"]
+                    ),
+                }
         return metrics_map
 
     def get_latest_results_file(self, directory):
