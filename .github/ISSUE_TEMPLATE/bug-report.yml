@@ -44,8 +44,7 @@ body:
     id: steps-to-reproduce
     attributes:
       label: Reproduction Steps
-      description: Provide a self-contained, concise snippet of code that can be used to reproduce the issue.
-      If applicable, include the command used to run the code and any relevant environment variables or configurations.  
+      description: Provide a self-contained, concise snippet of code that can be used to reproduce the issue.If applicable, include the command used to run the code and any relevant environment variables or configurations     
     validations:
       required: true
   - type: textarea
