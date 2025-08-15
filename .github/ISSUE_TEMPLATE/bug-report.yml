@@ -13,7 +13,7 @@ body:
     validations:
       required: true
   - type: textarea
-    id: jnstancetype
+    id: instancetype
     attributes:
       label: Instance Type
       description: What instance type are you using? (e.g.Inf2.xlarge/trn1.32xlarge/trn2.48xlarge etc.)
@@ -52,7 +52,7 @@ body:
     attributes:
       label: Attach relevant logs
       description: Please attach relevant logs.
-      validations:
+    validations:
        required: true
 
  
