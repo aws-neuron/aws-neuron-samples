@@ -1,7 +1,89 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.autograd import Function
+import neuronxcc.nki as nki
+import neuronxcc.nki.language as nl
+from neuronxcc.nki._private_kernels.conv import conv2d_dw_fb01_io01_01bf_rep_nhwc_Pcinh
 
+
+@nki.jit
+def conv_wrap(img_ref, filter_ref, out_shape):
+    out_arr = nl.ndarray(shape=out_shape, dtype=img_ref.dtype, buffer=nl.hbm)
+    conv2d_dw_fb01_io01_01bf_rep_nhwc_Pcinh(img_ref, filter_ref, out_arr, **{
+        'input': img_ref.shape,
+        'filter': filter_ref.shape,
+        'output': out_shape,
+        'in_perm': [0, 1, 2, 3],
+        'kern_perm': [0, 1, 2, 3],
+        'out_perm': [0, 1, 2, 3],
+        'stride': (1, 1), 
+        'padding': ((1, 1), (1, 1))})
+    return out_arr
+
+
+def conv_output_shape(input_shape, weight_shape, stride=1, padding=1):
+    assert len(input_shape) == 4
+    batch, _, in_h, in_w = input_shape
+
+    assert len(weight_shape) == 4
+    out_channels, _, kernel_h, kernel_w = weight_shape
+
+    out_h = (in_h + 2 * padding - kernel_h) // stride + 1
+    out_w = (in_w + 2 * padding - kernel_w) // stride + 1
+
+    return (batch, out_channels, out_h, out_w)
+
+
+class Conv2dBackward(Function):
+    @staticmethod
+    def forward(ctx, X, K):
+        ctx.save_for_backward(X, K)
+        return F.conv2d(X, K, padding=1)
+
+    @staticmethod
+    def backward(ctx, dL_dO):
+        X, K = ctx.saved_tensors
+
+        dL_dK = conv_wrap(
+            X.transpose(0, 1), 
+            dL_dO.transpose(0, 1), 
+            conv_output_shape(
+                (X.shape[1], X.shape[0], X.shape[2], X.shape[3]), 
+                (dL_dO.shape[1], dL_dO.shape[0], dL_dO.shape[2], dL_dO.shape[3])
+            )
+        ).transpose(0, 1)
+        dL_dX = F.conv_transpose2d(dL_dO, K, stride=1, padding=1)
+
+        return dL_dX, dL_dK
+
+
+class BwdConv2dWithKernel(nn.Module):
+    """
+    Custom Conv2d module using using NKI convolution kernel for backward pass
+    Fixed: padding=1, bias=False
+    """
+    def __init__(self, in_channels, out_channels, kernel_size, padding, bias):
+        super().__init__()
+
+        assert padding == 1
+        assert bias == False
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size
+        self.weight = nn.Parameter(torch.randn(out_channels, in_channels, kernel_size, kernel_size))
+
+        nn.init.kaiming_uniform_(self.weight, a=0.0, mode='fan_in', nonlinearity='leaky_relu')
+
+    def forward(self, x):
+        return Conv2dBackward.apply(x, self.weight)
+
+    def extra_repr(self):
+        return f'in_channels={self.in_channels}, out_channels={self.out_channels}, ' \
+               f'kernel_size={self.kernel_size}, padding=1, bias=False'
+
+
+# Based on:
 # milesial, U-Net: Semantic segmentation with PyTorch, GitHub repository
 # https://github.com/milesial/Pytorch-UNet
 
