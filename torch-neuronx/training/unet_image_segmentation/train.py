@@ -98,6 +98,7 @@ def train():
         for step, (data, target) in enumerate(loader):
             optimizer.zero_grad(set_to_none=True)
             output = model(data)
+            xm.mark_step()
             loss = loss_fn(output, target)
             loss.backward()
             xm.optimizer_step(optimizer)

@@ -35,7 +35,32 @@ def conv_output_shape(input_shape, weight_shape, stride=1, padding=1):
     return (batch, out_channels, out_h, out_w)
 
 
-class Conv2dBackward(Function):
+class Conv2dFunctionFB1B2(Function):
+    @staticmethod
+    def forward(ctx, X, K):
+        ctx.save_for_backward(X, K)
+        return conv_wrap(X, K, conv_output_shape(X.shape, K.shape))
+
+    @staticmethod
+    def backward(ctx, dL_dO):
+        X, K = ctx.saved_tensors
+
+        dL_dK = conv_wrap(
+            X.transpose(0, 1), 
+            dL_dO.transpose(0, 1), 
+            conv_output_shape(
+                (X.shape[1], X.shape[0], X.shape[2], X.shape[3]), 
+                (dL_dO.shape[1], dL_dO.shape[0], dL_dO.shape[2], dL_dO.shape[3])
+            )
+        ).transpose(0, 1)
+
+        K_t = K.transpose(0, 1).flip([2, 3])
+        dL_dX = conv_wrap(dL_dO, K_t, conv_output_shape(dL_dO.shape, K_t.shape))
+
+        return dL_dX, dL_dK
+
+
+class Conv2dFunctionB1B2(Function):
     @staticmethod
     def forward(ctx, X, K):
         ctx.save_for_backward(X, K)
@@ -53,6 +78,56 @@ class Conv2dBackward(Function):
                 (dL_dO.shape[1], dL_dO.shape[0], dL_dO.shape[2], dL_dO.shape[3])
             )
         ).transpose(0, 1)
+
+        K_t = K.transpose(0, 1).flip([2, 3])
+        dL_dX = conv_wrap(dL_dO, K_t, conv_output_shape(dL_dO.shape, K_t.shape))
+
+        return dL_dX, dL_dK
+
+
+class Conv2dFunctionFB1(Function):
+    @staticmethod
+    def forward(ctx, X, K):
+        ctx.save_for_backward(X, K)
+        return conv_wrap(X, K, conv_output_shape(X.shape, K.shape))
+
+    @staticmethod
+    def backward(ctx, dL_dO):
+        X, K = ctx.saved_tensors
+
+        dL_dK = conv_wrap(
+            X.transpose(0, 1), 
+            dL_dO.transpose(0, 1), 
+            conv_output_shape(
+                (X.shape[1], X.shape[0], X.shape[2], X.shape[3]), 
+                (dL_dO.shape[1], dL_dO.shape[0], dL_dO.shape[2], dL_dO.shape[3])
+            )
+        ).transpose(0, 1)
+
+        dL_dX = F.conv_transpose2d(dL_dO, K, stride=1, padding=1)
+
+        return dL_dX, dL_dK
+
+
+class Conv2dFunctionB1(Function):
+    @staticmethod
+    def forward(ctx, X, K):
+        ctx.save_for_backward(X, K)
+        return F.conv2d(X, K, padding=1)
+
+    @staticmethod
+    def backward(ctx, dL_dO):
+        X, K = ctx.saved_tensors
+
+        dL_dK = conv_wrap(
+            X.transpose(0, 1), 
+            dL_dO.transpose(0, 1), 
+            conv_output_shape(
+                (X.shape[1], X.shape[0], X.shape[2], X.shape[3]), 
+                (dL_dO.shape[1], dL_dO.shape[0], dL_dO.shape[2], dL_dO.shape[3])
+            )
+        ).transpose(0, 1)
+
         dL_dX = F.conv_transpose2d(dL_dO, K, stride=1, padding=1)
 
         return dL_dX, dL_dK
@@ -63,6 +138,16 @@ class BwdConv2dWithKernel(nn.Module):
     Custom Conv2d module using using NKI convolution kernel for backward pass
     Fixed: padding=1, bias=False
     """
+    def _pick_conv(self, x):
+        if self.in_channels > 128 and self.out_channels > 128:
+            return Conv2dFunctionB1.apply(x, self.weight)
+        elif self.out_channels > 128:
+            return Conv2dFunctionFB1.apply(x, self.weight)
+        elif self.in_channels > 128:
+            return Conv2dFunctionB1B2.apply(x, self.weight)
+        else:
+            return Conv2dFunctionFB1B2.apply(x, self.weight)
+
     def __init__(self, in_channels, out_channels, kernel_size, padding, bias):
         super().__init__()
 
@@ -76,7 +161,7 @@ class BwdConv2dWithKernel(nn.Module):
         nn.init.kaiming_uniform_(self.weight, a=0.0, mode='fan_in', nonlinearity='leaky_relu')
 
     def forward(self, x):
-        return Conv2dBackward.apply(x, self.weight)
+        return self._pick_conv(x)
 
     def extra_repr(self):
         return f'in_channels={self.in_channels}, out_channels={self.out_channels}, ' \
@@ -87,16 +172,16 @@ class BwdConv2dWithKernel(nn.Module):
 # milesial, U-Net: Semantic segmentation with PyTorch, GitHub repository
 # https://github.com/milesial/Pytorch-UNet
 
-class DoubleConv(nn.Module):
+class DoubleConvWithKernel(nn.Module):
     def __init__(self, in_channels, out_channels, mid_channels=None):
         super().__init__()
         if not mid_channels:
             mid_channels = out_channels
         self.double_conv = nn.Sequential(
-            nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1, bias=False),
+            BwdConv2dWithKernel(in_channels, mid_channels, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(mid_channels),
             nn.ReLU(inplace=True),
-            nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1, bias=False),
+            BwdConv2dWithKernel(mid_channels, out_channels, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True)
         )
@@ -110,7 +195,7 @@ class Down(nn.Module):
         super().__init__()
         self.maxpool_conv = nn.Sequential(
             nn.MaxPool2d(2),
-            DoubleConv(in_channels, out_channels)
+            DoubleConvWithKernel(in_channels, out_channels)
         )
 
     def forward(self, x):
@@ -123,10 +208,10 @@ class Up(nn.Module):
 
         if bilinear:
             self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-            self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
+            self.conv = DoubleConvWithKernel(in_channels, out_channels, in_channels // 2)
         else:
             self.up = nn.ConvTranspose2d(in_channels, in_channels // 2, kernel_size=2, stride=2)
-            self.conv = DoubleConv(in_channels, out_channels)
+            self.conv = DoubleConvWithKernel(in_channels, out_channels)
 
     def forward(self, x1, x2):
         x1 = self.up(x1)
@@ -156,7 +241,7 @@ class UNet(nn.Module):
         self.n_classes = n_classes
         self.bilinear = bilinear
 
-        self.inc = (DoubleConv(n_channels, 64))
+        self.inc = (DoubleConvWithKernel(n_channels, 64))
         self.down1 = (Down(64, 128))
         self.down2 = (Down(128, 256))
         self.down3 = (Down(256, 512))
