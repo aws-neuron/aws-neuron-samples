@@ -35,6 +35,14 @@ body:
     validations:
       required: true
   - type: textarea
+    id: instanceid
+    attributes:
+      label: EC2 Instance id
+      description: |
+       Provide the AWS EC2 instance id you used to run the workload
+    validations:
+      required: false
+  - type: textarea
     id: release
     attributes:
       label: Release version 
