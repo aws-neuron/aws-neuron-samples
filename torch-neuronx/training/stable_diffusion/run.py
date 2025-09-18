@@ -17,7 +17,7 @@ def parse_args():
     parser.add_argument('--model', choices=['2.1', '1.5'], default='2.1', help='Which model to train')
     parser.add_argument('--resolution', choices=[512], default=512, type=int, help='Which resolution of model to train')
     parser.add_argument('--batch_size', type=int, default=2, help='What per-device microbatch size to use')
-    parser.add_argument('--gradient_accumulation_steps', type=int, default=1, help='How many gradient accumulation steps to do (1 for no gradient accumulation)')
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=2, help='How many gradient accumulation steps to do (1 for no gradient accumulation)')
     parser.add_argument('--epochs', type=int, default=6, help='How many epochs to train for')
 
     # For saving checkpoints
@@ -68,7 +68,7 @@ if __name__ == "__main__":
 
     # Set environment variables that are needed
     # Model only fits at BF16
-    os.environ["XLA_DOWNCAST_BF16"] = "1"
+    os.environ["NEURON_RT_STOCHASTIC_ROUNDING_EN"] = "1"
     # Fix the stochastic rounding seed so training is reproducible
     os.environ["NEURON_RT_STOCHASTIC_ROUNDING_SEED"] = f"{args.neuron_rt_stochastic_rounding_seed}"
     os.environ["NEURON_RT_ASYNC_EXEC_MAX_INFLIGHT_REQUESTS"] = f"{args.neuron_rt_async_exec_max_inflight_requests}"
