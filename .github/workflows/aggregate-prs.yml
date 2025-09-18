@@ -24,41 +24,46 @@ jobs:
 
     - name: Check PR Labels and Merge for New Commit Events
       if: github.event.action == 'synchronize'
+      env:
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        PR_SHA: ${{ github.event.pull_request.head.sha }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        LABELS_JSON=$(gh pr view ${{ github.event.pull_request.number }} --json labels)
+        LABELS_JSON=$(gh pr view "$PR_NUMBER" --json labels)
         LABELS=$(echo "$LABELS_JSON" | jq -r '.labels[].name')
         for LABEL_BRANCH in $LABELS; do
           # Check if the branch exists
-          if git show-ref --verify --quiet refs/heads/$LABEL_BRANCH; then
+          if git show-ref --verify --quiet "refs/heads/$LABEL_BRANCH"; then
             echo "Branch $LABEL_BRANCH already exists."
           else
             echo "Branch $LABEL_BRANCH does not exist, creating it."
-            git branch $LABEL_BRANCH origin/master
+            git branch "$LABEL_BRANCH" origin/master
           fi
-          git checkout $LABEL_BRANCH
-
+          git checkout "$LABEL_BRANCH"
+        
           # Merge PR changes into dynamic branch
-          git merge ${{ github.event.pull_request.head.sha }} --no-ff --no-commit
-          git commit -m "Merged PR #${{ github.event.pull_request.number }} due to new commits on labeled PR"
-          git push origin $LABEL_BRANCH
+          git merge "$PR_SHA" --no-ff --no-commit
+          git commit -m "Merged PR #${PR_NUMBER} due to new commits on labeled PR"
+          git push origin "$LABEL_BRANCH"
         done
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Merge for Labeled Event
       if: github.event.action == 'labeled'
+      env:
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        PR_SHA: ${{ github.event.pull_request.head.sha }}
+        LABEL_BRANCH: ${{ github.event.label.name }}
       run: |
-        LABEL_BRANCH=${{ github.event.label.name }}
         # Check if the branch exists
-        if git show-ref --verify --quiet refs/heads/$LABEL_BRANCH; then
+        if git show-ref --verify --quiet "refs/heads/$LABEL_BRANCH"; then
           echo "Branch $LABEL_BRANCH already exists."
         else
           echo "Branch $LABEL_BRANCH does not exist, creating it."
-          git branch $LABEL_BRANCH origin/master
+          git branch "$LABEL_BRANCH" origin/master
         fi
-        git checkout $LABEL_BRANCH
-
+        git checkout "$LABEL_BRANCH"
+        
         # Merge PR changes into dynamic branch
-        git merge ${{ github.event.pull_request.head.sha }} --no-ff --no-commit
-        git commit -m "Merged PR #${{ github.event.pull_request.number }} due to label '$LABEL_BRANCH'"
-        git push origin $LABEL_BRANCH
+        git merge "$PR_SHA" --no-ff --no-commit
+        git commit -m "Merged PR #${PR_NUMBER} due to label '${LABEL_BRANCH}'"
+        git push origin "$LABEL_BRANCH"
