@@ -18,6 +18,7 @@ from glob import glob
 from typing import Union
 
 # Neuron
+from neuronx_distributed.utils.adamw_fp32_optim_params import AdamW_FP32OptimParams
 import torch_xla.core.xla_model as xm
 import torch_neuronx
 
@@ -64,6 +65,19 @@ import torch_xla.debug.profiler as xp
 from torch_xla.amp.syncfree.adamw import AdamW
 from torch_xla.distributed.zero_redundancy_optimizer import ZeroRedundancyOptimizer
 
+from importlib.metadata import version
+is_pt_2_x = version("torch") >= "2.0"
+
+if is_pt_2_x:
+    from torch_xla.utils.checkpoint import checkpoint as torch_xla_grad_checkpoint
+    # torch.utils.checkpoint.checkpoint doesn't work on PT 2.1
+    # https://awsdocs-neuron.readthedocs-hosted.com/en/latest/general/appnotes/torch-neuronx/introducing-pytorch-2-1.html?highlight=2.1#attributeerror-module-torch-has-no-attribute-xla-failure
+    def _call_grad_checkpoint(*args, **kwargs):
+        kwargs["use_reentrant"] = True
+        return torch_xla_grad_checkpoint(*args, **kwargs)
+
+    torch.utils.checkpoint.checkpoint = _call_grad_checkpoint
+
 
 
 ################################################################################
@@ -76,7 +90,7 @@ from torch_xla.distributed.zero_redundancy_optimizer import ZeroRedundancyOptimi
 # --model-type=cnn-training: To enable various CNN training-specific optimizations, including mixed tiling algorithm and spill-free attention BIR kernel matching
 # --enable-saturate-infinity: Needed for correctness. We get garbage data otherwise (probably from the CLIP text encoder)
 # -O1: Gets us better compile time, especially when not splitting the model at the FAL level
-compiler_flags = """ --retry_failed_compilation --cache_dir="./compiler_cache" --verbose=INFO -O1 --model-type=cnn-training  --enable-saturate-infinity """
+compiler_flags = """ --retry_failed_compilation --cache_dir="./compiler_cache" --model-type=cnn-training  --enable-saturate-infinity """
 
 os.environ["NEURON_CC_FLAGS"] = os.environ.get("NEURON_CC_FLAGS", "") + compiler_flags
 
@@ -291,7 +305,7 @@ def train(args):
 
     t = torch.tensor([0.1]).to(device=device)
     xm.mark_step()
-    xm.master_print(f"Initialized device, t={t.to(device='cpu')}")
+    xm.master_print(f"Initialized device, t={t.detach().to(device='cpu')}")
 
     # Warning: calls xm.rendezvous() internally
     seed_rng(device)
@@ -305,6 +319,10 @@ def train(args):
     vae = AutoencoderKL.from_pretrained(model_id, subfolder="vae")
 
     unet = UNet2DConditionModel.from_pretrained(model_id, subfolder="unet")
+    if os.getenv('NEURON_RT_STOCHASTIC_ROUNDING_EN', None):
+        text_encoder = text_encoder.to(torch.bfloat16)
+        vae = vae.to(torch.bfloat16)
+        unet = unet.to(torch.bfloat16)
     unet.requires_grad_(True)
 
     xm.master_print("Enabling gradient checkpointing")
@@ -324,14 +342,19 @@ def train(args):
     vae.requires_grad_(False)
     vae.eval()
     # Needed for vae encoder to not downcast to bf16 with XLA_DOWNCAST_BF16
-    for attn in vae.encoder.mid_block.attentions:
-        # Intent of this is to upcast to fp32, but actual effect under XLA_DOWNCAST_BF16 is to force to bf16.
-        attn.upcast_softmax = False
-    # Set to float64 so that XLA_DOWNCAST_BF16 keeps as FP32
-    vae.to(device=device, dtype=torch.float64)
+    if os.getenv('NEURON_RT_STOCHASTIC_ROUNDING_EN', None):
+        for attn in vae.encoder.mid_block.attentions:
+            # Intent of this is to upcast to fp32, but actual effect under XLA_DOWNCAST_BF16 is to force to bf16.
+            attn.upcast_softmax = False
+        # Set to float64 so that XLA_DOWNCAST_BF16 keeps as FP32
+        vae = vae.to(device=device, dtype=torch.float32)
 
     # TODO: parametrize optimizer parameters
-    optimizer = ZeroRedundancyOptimizer(optim_params, AdamW, pin_layout=False, lr=1e-5, betas=(0.9, 0.999), weight_decay=1e-2, eps=1e-08, capturable=True, optimizer_dtype=torch.double)
+    if is_pt_2_x:
+        optimizer_class = AdamW_FP32OptimParams
+    else:
+        optimizer_class = AdamW
+    optimizer = ZeroRedundancyOptimizer(optim_params, optimizer_class, pin_layout=False, lr=1e-5, betas=(0.9, 0.999), weight_decay=1e-2, eps=1e-08, capturable=True, optimizer_dtype=torch.float32)
 
     # Download the dataset
     xm.master_print('Downloading dataset')
@@ -431,7 +454,7 @@ def train(args):
     def collate_fn(examples):
         pixel_values = torch.stack([example["pixel_values"] for example in examples])
         # Set to double so that bf16 autocast keeps it as fp32
-        pixel_values = pixel_values.to(memory_format=torch.contiguous_format).double()
+        pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
         input_ids = torch.stack([example["input_ids"] for example in examples])
         return {"pixel_values": pixel_values, "input_ids": input_ids}
 
@@ -454,7 +477,8 @@ def train(args):
     xm.master_print('Entering training loop')
     xm.rendezvous('training-loop-start')
 
-    found_inf = torch.tensor(0, dtype=torch.double, device=device)
+    if not is_pt_2_x:
+        found_inf = torch.tensor(0, dtype=torch.double, device=device)
     checkpoints_saved = 0
 
     # Use a moving average window size of 100 so we have a large sample at
@@ -471,7 +495,7 @@ def train(args):
         for step, batch in enumerate(train_device_loader, start=(start_step + 1 if epoch == start_epoch else 0)):
             after_batch_load_time = time.perf_counter_ns()
 
-            xm.master_print(f"*** Running epoch {epoch} step {step} (cumulative step {cumulative_train_step})")
+            xm.master_print(f"*** Running epoch {epoch} step {step} (cumulative step {cumulative_train_step})", flush=True)
             start_time = time.perf_counter_ns()
 
             # Convert input image to latent space and add noise
@@ -484,7 +508,8 @@ def train(args):
                 for vae_input in vae_inputs_unbatched:
                     these_latents = vae.encode(vae_input).latent_dist.sample()
                     these_latents = these_latents * 0.18215
-                    these_latents = these_latents.float()  # Cast latents to bf16 (under XLA_DOWNCAST_BF16)
+                    if os.getenv('NEURON_RT_STOCHASTIC_ROUNDING_EN', None):
+                        these_latents = these_latents.to(torch.bfloat16)  # Cast latents to bf16 (under XLA_DOWNCAST_BF16)
 
                     vae_outputs.append(these_latents)
                 latents = torch.cat(vae_outputs, dim=0)
@@ -534,7 +559,10 @@ def train(args):
             with torch.no_grad():
                 # Optimizer
                 if (cumulative_train_step + 1) % args.gradient_accumulation_steps == 0:
-                    optimizer.step(found_inf=found_inf)
+                    if is_pt_2_x:
+                        optimizer.step()
+                    else:
+                        optimizer.step(found_inf=found_inf)
                     lr_scheduler.step()
                     optimizer.zero_grad(set_to_none=True)
                     xm.master_print("Finished weight update")
@@ -688,7 +716,7 @@ if __name__ == "__main__":
     xm.master_print(f"## XLA flags ##")
     xm.master_print(f"XLA_IR_DEBUG: {os.getenv('XLA_IR_DEBUG', None)}")
     xm.master_print(f"XLA_HLO_DEBUG: {os.getenv('XLA_HLO_DEBUG', None)}")
-    xm.master_print(f"XLA_DOWNCAST_BF16: {os.getenv('XLA_DOWNCAST_BF16', None)}")
+    xm.master_print(f"NEURON_RT_STOCHASTIC_ROUNDING_EN: {os.getenv('NEURON_RT_STOCHASTIC_ROUNDING_EN', None)}")
 
     xm.rendezvous("Entering training function")
 
