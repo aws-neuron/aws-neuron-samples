@@ -31,7 +31,7 @@ body:
     attributes:
       label: Instance Type
       description: |
-       Provide the AWS EC2 instance type you used to run the workload.
+       Provide the AWS EC2 instance type you used to run the workload (such as `inf2.xlarge`, `trn1.32xlarge`, `trn2.48xlarge` etc.)
     validations:
       required: false
   - type: textarea
