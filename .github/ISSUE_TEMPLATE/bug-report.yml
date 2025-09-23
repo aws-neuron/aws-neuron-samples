@@ -33,7 +33,7 @@ body:
       description: |
        Provide the AWS EC2 instance type you used to run the workload (such as `inf2.xlarge`, `trn1.32xlarge`, `trn2.48xlarge` etc.)
     validations:
-      required: false
+      required: true
   - type: textarea
     id: instanceid
     attributes:
@@ -41,7 +41,7 @@ body:
       description: |
        Provide the AWS EC2 Instance Id details you used to run the workload.
     validations:
-      required: true
+      required: false
   - type: textarea
     id: release
     attributes:
