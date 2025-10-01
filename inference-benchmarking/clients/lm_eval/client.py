@@ -27,11 +27,6 @@ class LMEvalClient:
         if result.returncode != 0:
             raise RuntimeError("Failed to setup LM-Eval client")
 
-        # Copy gated datasets from s3 to ~/.cache/huggingface/datasets/
-        os.system(
-            f"aws s3 sync --region=us-west-2 s3://kaena-nn-models/bat-accuracy-datasets/Idavidrein___gpqa/ ~/.cache/huggingface/datasets/Idavidrein___gpqa/ --only-show-errors"
-        )
-
     def evaluate(
         self,
         model_path: str,
