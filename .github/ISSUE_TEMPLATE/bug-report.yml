@@ -87,7 +87,7 @@ body:
     attributes:
       label: Logs/Context/Additional Information
       description: |
-        Anything else that might be relevant for troubleshooting this bug. Providing context helps us come up with a solution that is most useful in the real world. When applicable, please provide HLOs and compiler commands.
+        Anything else that might be relevant for troubleshooting this bug. Providing context helps us come up with a solution that is most useful in the real world. When applicable, please provide HLOs and compiler commands. Please remove any proprietary or confidential data in your logs.
     validations:
       required: false
 
