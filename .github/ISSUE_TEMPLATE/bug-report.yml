@@ -62,7 +62,7 @@ body:
         For more complex issues provide a repo with the smallest sample that reproduces the bug.
         
         Avoid including business logic or unrelated code as it makes diagnosis more difficult.
-        The code sample should be an SSCCE. See http://sscce.org/ for details. In short, please provide a code sample that we can copy/paste, run and reproduce.
+        The code sample should be an SSCCE. See http://sscce.org/ for details. In short, please provide a code sample that we can copy/paste, run and reproduce. Please remove any proprietary or confidential data in your logs
     validations:
       required: true
   - type: checkboxes
