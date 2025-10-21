@@ -6,6 +6,10 @@ on:
     branches:
       - master
 
+permissions:
+  contents: write
+  pull-requests: read
+
 jobs:
   merge-to-dynamic-branch:
     if: github.event.label.name != 'do-not-merge' #Excludes those labeled with do-not-merge
