@@ -564,6 +564,7 @@ def main():
             optimizer_grouped_parameters,
             torch.optim.AdamW,
             lr=args.learning_rate,
+            betas=(0.9, 0.999), eps=1e-08, weight_decay=0,
             grad_clipping=args.use_grad_clipping,
             max_norm=args.max_grad_norm,
             pin_layout=False,
