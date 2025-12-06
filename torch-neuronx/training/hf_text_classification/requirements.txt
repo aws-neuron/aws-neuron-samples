@@ -1,0 +1,4 @@
+transformers==4.52.3
+datasets
+scikit-learn
+evaluate
