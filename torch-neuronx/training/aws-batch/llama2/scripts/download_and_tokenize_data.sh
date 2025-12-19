@@ -2,7 +2,7 @@
 set -eu
 
 # installing the requirements
-python3 -m pip install transformers regex datasets sentencepiece protobuf==3.20.*
+python3 -m pip install transformers regex datasets sentencepiece
 
 # downloading and tokenizing the dataset
 cd ./data
