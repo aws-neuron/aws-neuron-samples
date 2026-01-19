@@ -8,5 +8,5 @@ accelerate
 datasets==2.19.1
 sentencepiece==0.2.0
 h5py
-requests==2.31.0
+requests==2.32.2
 huggingface-hub==0.24.5
