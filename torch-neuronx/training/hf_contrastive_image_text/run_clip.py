@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# IMPORTANT: Neuron will stop supporting XLA-based training support in a future release. For now, this code sample is provided strictly for reference.
 # coding=utf-8
 # Copyright 2022 The HuggingFace Team All rights reserved.
 #
