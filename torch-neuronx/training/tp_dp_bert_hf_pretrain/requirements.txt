@@ -1,6 +1,6 @@
 graphviz
 tensorboard==2.6
-transformers==4.26.0
+transformers==4.48.0
 evaluate
 pillow
 pytest
